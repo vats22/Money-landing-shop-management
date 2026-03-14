@@ -47,6 +47,9 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - Fixed: Edit form preserves existing entry data (remaining_principal, accumulated_interest, etc.)
 - Fixed: Null value handling in interest calculations for legacy accounts
 - Fixed: Account totals calculation handles missing or null values gracefully
+- Fixed: Payment processing correctly distributes between interest (first) and principal
+- Fixed: Ledger regenerated on account update to reflect correct payment distribution
+- Fixed: Add received entry endpoint passes correct date to ledger entry
 
 ### Frontend Features
 - Professional login page with split design

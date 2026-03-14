@@ -862,7 +862,8 @@ async def add_landed_entry(account_id: str, entry: LandedEntry, current_user: di
         entry.amount,
         0,
         totals["total_pending_amount"],
-        str(current_user["_id"])
+        str(current_user["_id"]),
+        entry.date  # Pass the actual landed date
     )
     
     return {"message": "Landed entry added successfully"}
@@ -909,7 +910,8 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
         principal_paid,
         interest_paid,
         totals["total_pending_amount"],
-        str(current_user["_id"])
+        str(current_user["_id"]),
+        entry.date  # Pass the actual payment date
     )
     
     return {
