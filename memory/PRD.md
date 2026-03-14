@@ -42,6 +42,12 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - User management with permissions
 - Dashboard summary calculations
 
+### Bug Fixes (March 14, 2026)
+- Fixed: Ledger entries now use actual transaction date instead of current date
+- Fixed: Edit form preserves existing entry data (remaining_principal, accumulated_interest, etc.)
+- Fixed: Null value handling in interest calculations for legacy accounts
+- Fixed: Account totals calculation handles missing or null values gracefully
+
 ### Frontend Features
 - Professional login page with split design
 - Dashboard with summary cards and statistics

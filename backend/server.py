@@ -182,37 +182,45 @@ class AccountUpdate(BaseModel):
 # Interest Calculation Logic
 def calculate_interest_for_entry(landed_entry: dict, calc_date: datetime) -> float:
     """Calculate interest for a single landed entry up to calc_date"""
-    entry_date = datetime.fromisoformat(landed_entry.get("last_interest_calc_date") or landed_entry["date"])
-    if isinstance(entry_date, str):
-        entry_date = datetime.fromisoformat(entry_date)
-    
-    # Ensure both dates have the same timezone awareness
-    if entry_date.tzinfo is None and calc_date.tzinfo is not None:
-        entry_date = entry_date.replace(tzinfo=timezone.utc)
-    elif entry_date.tzinfo is not None and calc_date.tzinfo is None:
-        calc_date = calc_date.replace(tzinfo=timezone.utc)
-    
-    principal = landed_entry.get("remaining_principal", landed_entry["amount"])
-    rate = landed_entry["interest_rate"] / 100  # Convert percentage to decimal
-    
-    # Calculate months between dates
-    days = (calc_date - entry_date).days
-    months = days / 30.0  # Approximate months
-    
-    # Monthly interest calculation
-    interest = principal * rate * months
-    accumulated = landed_entry.get("accumulated_interest", 0.0)
-    
-    return round(interest + accumulated, 2)
+    try:
+        date_str = landed_entry.get("last_interest_calc_date") or landed_entry.get("date")
+        if not date_str:
+            return 0.0
+        entry_date = datetime.fromisoformat(date_str)
+        if isinstance(entry_date, str):
+            entry_date = datetime.fromisoformat(entry_date)
+        
+        # Ensure both dates have the same timezone awareness
+        if entry_date.tzinfo is None and calc_date.tzinfo is not None:
+            entry_date = entry_date.replace(tzinfo=timezone.utc)
+        elif entry_date.tzinfo is not None and calc_date.tzinfo is None:
+            calc_date = calc_date.replace(tzinfo=timezone.utc)
+        
+        principal = landed_entry.get("remaining_principal") or landed_entry.get("amount", 0) or 0
+        interest_rate = landed_entry.get("interest_rate", 2) or 2
+        rate = float(interest_rate) / 100  # Convert percentage to decimal
+        
+        # Calculate months between dates
+        days = (calc_date - entry_date).days
+        months = days / 30.0  # Approximate months
+        
+        # Monthly interest calculation
+        interest = float(principal) * rate * months
+        accumulated = float(landed_entry.get("accumulated_interest", 0.0) or 0.0)
+        
+        return round(interest + accumulated, 2)
+    except Exception as e:
+        print(f"Error calculating interest: {e}")
+        return 0.0
 
 def calculate_account_totals(account: dict) -> dict:
     """Calculate all account totals including interest"""
     now = datetime.now(timezone.utc)
     
-    total_landed = sum(entry["amount"] for entry in account.get("landed_entries", []))
-    total_received = sum(entry["amount"] for entry in account.get("received_entries", []))
-    received_principal = sum(entry.get("principal_paid", 0) for entry in account.get("received_entries", []))
-    received_interest = sum(entry.get("interest_paid", 0) for entry in account.get("received_entries", []))
+    total_landed = sum(entry.get("amount", 0) or 0 for entry in account.get("landed_entries", []))
+    total_received = sum(entry.get("amount", 0) or 0 for entry in account.get("received_entries", []))
+    received_principal = sum(entry.get("principal_paid", 0) or 0 for entry in account.get("received_entries", []))
+    received_interest = sum(entry.get("interest_paid", 0) or 0 for entry in account.get("received_entries", []))
     
     # Calculate total pending principal
     total_pending_principal = total_landed - received_principal
@@ -220,15 +228,15 @@ def calculate_account_totals(account: dict) -> dict:
     # Calculate current total interest
     total_interest = 0.0
     for entry in account.get("landed_entries", []):
-        remaining_principal = entry.get("remaining_principal", entry["amount"])
-        if remaining_principal > 0:
+        remaining_principal = entry.get("remaining_principal") or entry.get("amount", 0) or 0
+        if remaining_principal and remaining_principal > 0:
             total_interest += calculate_interest_for_entry(entry, now)
     
     # Pending interest = total calculated interest - interest already paid
     total_pending_interest = max(0, total_interest - received_interest)
     
     # Total jewellery weight
-    total_jewellery_weight = sum(item["weight"] for item in account.get("jewellery_items", []))
+    total_jewellery_weight = sum(item.get("weight", 0) or 0 for item in account.get("jewellery_items", []))
     
     return {
         "total_landed_amount": round(total_landed, 2),
@@ -294,11 +302,22 @@ def process_payment(landed_entries: List[dict], payment_amount: float, payment_d
 
 async def create_ledger_entry(account_id: str, transaction_type: str, amount: float, 
                              principal_amount: float, interest_amount: float, 
-                             balance_amount: float, created_by: str):
+                             balance_amount: float, created_by: str, transaction_date: str = None):
     """Create a ledger entry"""
+    # Use provided date or current date
+    if transaction_date:
+        try:
+            txn_date = datetime.fromisoformat(transaction_date)
+            if txn_date.tzinfo is None:
+                txn_date = txn_date.replace(tzinfo=timezone.utc)
+        except:
+            txn_date = datetime.now(timezone.utc)
+    else:
+        txn_date = datetime.now(timezone.utc)
+    
     ledger_entry = {
         "account_id": account_id,
-        "transaction_date": datetime.now(timezone.utc),
+        "transaction_date": txn_date,
         "transaction_type": transaction_type,
         "amount": amount,
         "principal_amount": principal_amount,
@@ -628,7 +647,8 @@ async def create_account(account: AccountCreate, current_user: dict = Depends(ve
             entry["amount"],
             0,
             totals["total_pending_amount"],
-            str(current_user["_id"])
+            str(current_user["_id"]),
+            entry["date"]  # Use the actual landed date
         )
     
     for entry in received_entries:
@@ -640,7 +660,8 @@ async def create_account(account: AccountCreate, current_user: dict = Depends(ve
             entry["principal_paid"],
             entry["interest_paid"],
             totals["total_pending_amount"],
-            str(current_user["_id"])
+            str(current_user["_id"]),
+            entry["date"]  # Use the actual received date
         )
     
     totals = calculate_account_totals(account_doc)
@@ -663,32 +684,46 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
     
     update_data = {k: v for k, v in account.model_dump().items() if v is not None}
     
+    # Process jewellery items if provided
+    if "jewellery_items" in update_data:
+        jewellery_items = []
+        for item in update_data["jewellery_items"]:
+            if isinstance(item, dict) and item.get("name") and item.get("weight"):
+                jewellery_items.append({
+                    "name": item["name"],
+                    "weight": float(item["weight"])
+                })
+        update_data["jewellery_items"] = jewellery_items
+    
     # Process landed entries if provided
     if "landed_entries" in update_data:
         landed_entries = []
         for entry in update_data["landed_entries"]:
-            if isinstance(entry, dict):
-                entry["remaining_principal"] = entry.get("remaining_principal", entry["amount"])
-                entry["last_interest_calc_date"] = entry.get("last_interest_calc_date", entry["date"])
-                entry["accumulated_interest"] = entry.get("accumulated_interest", 0.0)
-                landed_entries.append(entry)
+            if isinstance(entry, dict) and entry.get("date") and entry.get("amount"):
+                processed_entry = {
+                    "date": entry["date"],
+                    "amount": float(entry["amount"]),
+                    "interest_rate": float(entry.get("interest_rate", 2)),
+                    "remaining_principal": float(entry.get("remaining_principal", entry["amount"])),
+                    "last_interest_calc_date": entry.get("last_interest_calc_date", entry["date"]),
+                    "accumulated_interest": float(entry.get("accumulated_interest", 0.0))
+                }
+                landed_entries.append(processed_entry)
         update_data["landed_entries"] = landed_entries
     
-    # Process received entries if provided
-    if "received_entries" in update_data and "landed_entries" in update_data:
-        landed_entries = update_data["landed_entries"]
+    # Process received entries if provided - preserve existing calculations
+    if "received_entries" in update_data:
         received_entries = []
         for recv_entry in update_data["received_entries"]:
-            if isinstance(recv_entry, dict):
-                payment_date = datetime.fromisoformat(recv_entry["date"])
-                landed_entries, principal_paid, interest_paid = process_payment(
-                    landed_entries, recv_entry["amount"], payment_date
-                )
-                recv_entry["principal_paid"] = principal_paid
-                recv_entry["interest_paid"] = interest_paid
-                received_entries.append(recv_entry)
+            if isinstance(recv_entry, dict) and recv_entry.get("date") and recv_entry.get("amount"):
+                processed_entry = {
+                    "date": recv_entry["date"],
+                    "amount": float(recv_entry["amount"]),
+                    "principal_paid": float(recv_entry.get("principal_paid", 0)),
+                    "interest_paid": float(recv_entry.get("interest_paid", 0))
+                }
+                received_entries.append(processed_entry)
         update_data["received_entries"] = received_entries
-        update_data["landed_entries"] = landed_entries
     
     update_data["updated_at"] = datetime.now(timezone.utc)
     update_data["updated_by"] = str(current_user["_id"])

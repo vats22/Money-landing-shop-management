@@ -138,11 +138,11 @@ export default function AccountFormPage() {
   };
 
   const validateForm = () => {
-    if (!formData.name.trim()) {
+    if (!formData.name || !formData.name.trim()) {
       toast.error('Name is required');
       return false;
     }
-    if (!formData.village.trim()) {
+    if (!formData.village || !formData.village.trim()) {
       toast.error('Village is required');
       return false;
     }
@@ -153,7 +153,7 @@ export default function AccountFormPage() {
 
     // Validate jewellery items
     const validJewellery = formData.jewellery_items.filter(
-      item => item.name.trim() && parseFloat(item.weight) > 0
+      item => item.name && item.name.trim() && parseFloat(item.weight) > 0
     );
     if (validJewellery.length === 0) {
       toast.error('At least one jewellery item is required');
@@ -178,25 +178,42 @@ export default function AccountFormPage() {
 
     setSaving(true);
     try {
-      // Filter out empty entries
+      // Filter out empty entries and prepare payload
+      const jewellery_items = formData.jewellery_items
+        .filter(item => item.name && item.name.trim() && parseFloat(item.weight) > 0)
+        .map(item => ({ name: item.name, weight: parseFloat(item.weight) }));
+      
+      const landed_entries = formData.landed_entries
+        .filter(entry => entry.date && parseFloat(entry.amount) > 0)
+        .map(entry => ({
+          date: entry.date,
+          amount: parseFloat(entry.amount),
+          interest_rate: parseFloat(entry.interest_rate) || 2,
+          // Preserve existing calculated fields during edit
+          remaining_principal: entry.remaining_principal !== undefined ? parseFloat(entry.remaining_principal) : parseFloat(entry.amount),
+          last_interest_calc_date: entry.last_interest_calc_date || entry.date,
+          accumulated_interest: entry.accumulated_interest !== undefined ? parseFloat(entry.accumulated_interest) : 0
+        }));
+      
+      const received_entries = formData.received_entries
+        .filter(entry => entry.date && parseFloat(entry.amount) > 0)
+        .map(entry => ({
+          date: entry.date,
+          amount: parseFloat(entry.amount),
+          // Preserve existing calculated fields during edit
+          principal_paid: entry.principal_paid !== undefined ? parseFloat(entry.principal_paid) : 0,
+          interest_paid: entry.interest_paid !== undefined ? parseFloat(entry.interest_paid) : 0
+        }));
+
       const payload = {
-        ...formData,
-        jewellery_items: formData.jewellery_items
-          .filter(item => item.name.trim() && parseFloat(item.weight) > 0)
-          .map(item => ({ name: item.name, weight: parseFloat(item.weight) })),
-        landed_entries: formData.landed_entries
-          .filter(entry => entry.date && parseFloat(entry.amount) > 0)
-          .map(entry => ({
-            date: entry.date,
-            amount: parseFloat(entry.amount),
-            interest_rate: parseFloat(entry.interest_rate) || 2
-          })),
-        received_entries: formData.received_entries
-          .filter(entry => entry.date && parseFloat(entry.amount) > 0)
-          .map(entry => ({
-            date: entry.date,
-            amount: parseFloat(entry.amount)
-          }))
+        opening_date: formData.opening_date,
+        name: formData.name,
+        village: formData.village,
+        status: formData.status,
+        details: formData.details,
+        jewellery_items,
+        landed_entries,
+        received_entries
       };
 
       if (isEdit) {
