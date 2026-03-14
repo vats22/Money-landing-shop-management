@@ -695,7 +695,7 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
                 })
         update_data["jewellery_items"] = jewellery_items
     
-    # Process landed entries if provided
+    # Process landed entries if provided - initialize for payment processing
     if "landed_entries" in update_data:
         landed_entries = []
         for entry in update_data["landed_entries"]:
@@ -704,26 +704,61 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
                     "date": entry["date"],
                     "amount": float(entry["amount"]),
                     "interest_rate": float(entry.get("interest_rate", 2)),
-                    "remaining_principal": float(entry.get("remaining_principal", entry["amount"])),
-                    "last_interest_calc_date": entry.get("last_interest_calc_date", entry["date"]),
-                    "accumulated_interest": float(entry.get("accumulated_interest", 0.0))
+                    "remaining_principal": float(entry["amount"]),  # Reset for recalculation
+                    "last_interest_calc_date": entry["date"],  # Reset for recalculation
+                    "accumulated_interest": 0.0  # Reset for recalculation
                 }
                 landed_entries.append(processed_entry)
         update_data["landed_entries"] = landed_entries
+    else:
+        # Use existing landed entries
+        landed_entries = existing.get("landed_entries", [])
+        # Reset them for recalculation
+        for entry in landed_entries:
+            entry["remaining_principal"] = float(entry["amount"])
+            entry["last_interest_calc_date"] = entry["date"]
+            entry["accumulated_interest"] = 0.0
+        update_data["landed_entries"] = landed_entries
     
-    # Process received entries if provided - preserve existing calculations
+    # Process received entries - recalculate payment distribution
     if "received_entries" in update_data:
+        landed_entries = update_data["landed_entries"]
         received_entries = []
-        for recv_entry in update_data["received_entries"]:
-            if isinstance(recv_entry, dict) and recv_entry.get("date") and recv_entry.get("amount"):
-                processed_entry = {
-                    "date": recv_entry["date"],
-                    "amount": float(recv_entry["amount"]),
-                    "principal_paid": float(recv_entry.get("principal_paid", 0)),
-                    "interest_paid": float(recv_entry.get("interest_paid", 0))
-                }
-                received_entries.append(processed_entry)
+        new_ledger_entries = []
+        
+        # Sort received entries by date
+        raw_received = sorted(
+            [e for e in update_data["received_entries"] if isinstance(e, dict) and e.get("date") and e.get("amount")],
+            key=lambda x: x["date"]
+        )
+        
+        for recv_entry in raw_received:
+            payment_date = datetime.fromisoformat(recv_entry["date"])
+            payment_amount = float(recv_entry["amount"])
+            
+            # Process payment through all landed entries
+            landed_entries, principal_paid, interest_paid = process_payment(
+                landed_entries, payment_amount, payment_date
+            )
+            
+            processed_entry = {
+                "date": recv_entry["date"],
+                "amount": payment_amount,
+                "principal_paid": principal_paid,
+                "interest_paid": interest_paid
+            }
+            received_entries.append(processed_entry)
+            
+            # Track new ledger entries needed
+            new_ledger_entries.append({
+                "date": recv_entry["date"],
+                "amount": payment_amount,
+                "principal_paid": principal_paid,
+                "interest_paid": interest_paid
+            })
+        
         update_data["received_entries"] = received_entries
+        update_data["landed_entries"] = landed_entries
     
     update_data["updated_at"] = datetime.now(timezone.utc)
     update_data["updated_by"] = str(current_user["_id"])
@@ -734,7 +769,40 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
         {"$set": update_data}
     )
     
+    # Regenerate ledger entries for this account
+    await ledger_collection.delete_many({"account_id": account_id})
+    
     updated_account = await accounts_collection.find_one({"_id": ObjectId(account_id)})
+    
+    # Create ledger entries for landed entries
+    running_balance = 0.0
+    for entry in updated_account.get("landed_entries", []):
+        running_balance += float(entry["amount"])
+        await create_ledger_entry(
+            account_id,
+            "LANDED",
+            entry["amount"],
+            entry["amount"],
+            0,
+            running_balance,
+            str(current_user["_id"]),
+            entry["date"]
+        )
+    
+    # Create ledger entries for received entries
+    for entry in updated_account.get("received_entries", []):
+        running_balance -= float(entry.get("principal_paid", 0))
+        await create_ledger_entry(
+            account_id,
+            "PAYMENT",
+            entry["amount"],
+            entry.get("principal_paid", 0),
+            entry.get("interest_paid", 0),
+            running_balance,
+            str(current_user["_id"]),
+            entry["date"]
+        )
+    
     totals = calculate_account_totals(updated_account)
     response = serialize_doc(updated_account)
     response.update(totals)
