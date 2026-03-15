@@ -180,63 +180,87 @@ class AccountUpdate(BaseModel):
     received_entries: Optional[List[ReceivedEntry]] = None
 
 # Interest Calculation Logic
-def calculate_interest_for_entry(landed_entry: dict, calc_date: datetime) -> float:
-    """Calculate interest for a single landed entry up to calc_date"""
+def calculate_interest_for_entry(landed_entry: dict, calc_date: datetime) -> dict:
+    """
+    Calculate interest for a single landed entry up to calc_date
+    Returns dict with interest details for display
+    Formula: Interest = (Principal × Rate × Days) / (100 × 30)
+    """
     try:
-        date_str = landed_entry.get("last_interest_calc_date") or landed_entry.get("date")
-        if not date_str:
-            return 0.0
-        entry_date = datetime.fromisoformat(date_str)
-        if isinstance(entry_date, str):
-            entry_date = datetime.fromisoformat(entry_date)
+        # Get the interest start date (either last payment date or landed date)
+        interest_start_date_str = landed_entry.get("interest_start_date") or landed_entry.get("date")
+        if not interest_start_date_str:
+            return {"interest": 0.0, "days": 0, "interest_start_date": None}
         
-        # Ensure both dates have the same timezone awareness
-        if entry_date.tzinfo is None and calc_date.tzinfo is not None:
-            entry_date = entry_date.replace(tzinfo=timezone.utc)
-        elif entry_date.tzinfo is not None and calc_date.tzinfo is None:
+        # Parse the interest start date
+        if isinstance(interest_start_date_str, str):
+            interest_start_date = datetime.fromisoformat(interest_start_date_str.replace('Z', '+00:00'))
+        else:
+            interest_start_date = interest_start_date_str
+        
+        # Ensure timezone awareness
+        if interest_start_date.tzinfo is None:
+            interest_start_date = interest_start_date.replace(tzinfo=timezone.utc)
+        if calc_date.tzinfo is None:
             calc_date = calc_date.replace(tzinfo=timezone.utc)
         
-        principal = landed_entry.get("remaining_principal") or landed_entry.get("amount", 0) or 0
-        interest_rate = landed_entry.get("interest_rate", 2) or 2
-        rate = float(interest_rate) / 100  # Convert percentage to decimal
+        # Get remaining principal
+        remaining_principal = float(landed_entry.get("remaining_principal") or landed_entry.get("amount", 0) or 0)
+        if remaining_principal <= 0:
+            return {"interest": 0.0, "days": 0, "interest_start_date": interest_start_date_str}
         
-        # Calculate months between dates
-        days = (calc_date - entry_date).days
-        months = days / 30.0  # Approximate months
+        interest_rate = float(landed_entry.get("interest_rate", 2) or 2)
         
-        # Monthly interest calculation
-        interest = float(principal) * rate * months
-        accumulated = float(landed_entry.get("accumulated_interest", 0.0) or 0.0)
+        # Calculate days between interest start date and calculation date
+        days = max(0, (calc_date - interest_start_date).days)
         
-        return round(interest + accumulated, 2)
+        # Formula: Interest = (Principal × Rate × Days) / (100 × 30)
+        calculated_interest = (remaining_principal * interest_rate * days) / (100 * 30)
+        
+        # Add any carried forward interest
+        carried_forward = float(landed_entry.get("carried_forward_interest", 0.0) or 0.0)
+        total_interest = calculated_interest + carried_forward
+        
+        return {
+            "interest": round(total_interest, 2),
+            "calculated_interest": round(calculated_interest, 2),
+            "carried_forward_interest": round(carried_forward, 2),
+            "days": days,
+            "interest_start_date": interest_start_date_str
+        }
     except Exception as e:
         print(f"Error calculating interest: {e}")
-        return 0.0
+        return {"interest": 0.0, "days": 0, "interest_start_date": None}
+
+def get_total_interest_for_entry(landed_entry: dict, calc_date: datetime) -> float:
+    """Get just the total interest amount for an entry"""
+    result = calculate_interest_for_entry(landed_entry, calc_date)
+    return result.get("interest", 0.0)
 
 def calculate_account_totals(account: dict) -> dict:
     """Calculate all account totals including interest"""
     now = datetime.now(timezone.utc)
     
-    total_landed = sum(entry.get("amount", 0) or 0 for entry in account.get("landed_entries", []))
-    total_received = sum(entry.get("amount", 0) or 0 for entry in account.get("received_entries", []))
-    received_principal = sum(entry.get("principal_paid", 0) or 0 for entry in account.get("received_entries", []))
-    received_interest = sum(entry.get("interest_paid", 0) or 0 for entry in account.get("received_entries", []))
+    total_landed = sum(float(entry.get("amount", 0) or 0) for entry in account.get("landed_entries", []))
+    total_received = sum(float(entry.get("amount", 0) or 0) for entry in account.get("received_entries", []))
+    received_principal = sum(float(entry.get("principal_paid", 0) or 0) for entry in account.get("received_entries", []))
+    received_interest = sum(float(entry.get("interest_paid", 0) or 0) for entry in account.get("received_entries", []))
     
-    # Calculate total pending principal
-    total_pending_principal = total_landed - received_principal
-    
-    # Calculate current total interest
-    total_interest = 0.0
+    # Calculate total pending principal from remaining principals
+    total_pending_principal = 0.0
     for entry in account.get("landed_entries", []):
-        remaining_principal = entry.get("remaining_principal") or entry.get("amount", 0) or 0
-        if remaining_principal and remaining_principal > 0:
-            total_interest += calculate_interest_for_entry(entry, now)
+        remaining = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
+        total_pending_principal += remaining
     
-    # Pending interest = total calculated interest - interest already paid
-    total_pending_interest = max(0, total_interest - received_interest)
+    # Calculate current total interest (includes carried forward)
+    total_pending_interest = 0.0
+    for entry in account.get("landed_entries", []):
+        remaining_principal = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
+        if remaining_principal > 0:
+            total_pending_interest += get_total_interest_for_entry(entry, now)
     
     # Total jewellery weight
-    total_jewellery_weight = sum(item.get("weight", 0) or 0 for item in account.get("jewellery_items", []))
+    total_jewellery_weight = sum(float(item.get("weight", 0) or 0) for item in account.get("jewellery_items", []))
     
     return {
         "total_landed_amount": round(total_landed, 2),
@@ -244,66 +268,92 @@ def calculate_account_totals(account: dict) -> dict:
         "received_principal": round(received_principal, 2),
         "received_interest": round(received_interest, 2),
         "total_pending_amount": round(total_pending_principal, 2),
-        "total_interest_amount": round(total_interest, 2),
+        "total_interest_amount": round(total_pending_interest, 2),
         "total_pending_interest": round(total_pending_interest, 2),
         "total_jewellery_weight": round(total_jewellery_weight, 2)
     }
 
 def process_payment(landed_entries: List[dict], payment_amount: float, payment_date: datetime) -> tuple:
-    """Process payment and distribute between interest and principal"""
-    remaining_payment = payment_amount
+    """
+    Process payment and distribute between interest and principal
+    
+    Logic:
+    1. First calculate total interest due across all entries
+    2. If payment >= interest: pay all interest, remaining goes to principal (FIFO)
+    3. If payment < interest: pay partial interest, carry forward remaining interest
+    """
+    remaining_payment = float(payment_amount)
     total_interest_paid = 0.0
     total_principal_paid = 0.0
+    remaining_interest_after_payment = 0.0
     
-    # First, calculate total interest due
+    # Calculate total interest due across all entries
     total_interest_due = 0.0
+    entry_interests = []
     for entry in landed_entries:
-        if entry.get("remaining_principal", entry["amount"]) > 0:
-            total_interest_due += calculate_interest_for_entry(entry, payment_date)
+        remaining_principal = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
+        if remaining_principal > 0:
+            entry_interest = get_total_interest_for_entry(entry, payment_date)
+            entry_interests.append(entry_interest)
+            total_interest_due += entry_interest
+        else:
+            entry_interests.append(0.0)
     
-    # Case 1: Payment >= Interest Due
+    print(f"[Payment Processing] Total Interest Due: {total_interest_due}, Payment: {payment_amount}")
+    
+    # Case 1: Payment >= Total Interest Due
     if remaining_payment >= total_interest_due:
         total_interest_paid = total_interest_due
         remaining_payment -= total_interest_due
         
-        # Reset accumulated interest and update last calc date for all entries
+        # Clear all carried forward interest and reset interest start dates
         for entry in landed_entries:
-            entry["accumulated_interest"] = 0.0
-            entry["last_interest_calc_date"] = payment_date.isoformat()
+            entry["carried_forward_interest"] = 0.0
+            entry["interest_start_date"] = payment_date.isoformat()
         
-        # Distribute remaining to principal (FIFO - oldest first)
+        # Distribute remaining payment to principal (FIFO - oldest entry first)
         for entry in landed_entries:
             if remaining_payment <= 0:
                 break
-            remaining_principal = entry.get("remaining_principal", entry["amount"])
+            remaining_principal = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
             if remaining_principal > 0:
                 principal_payment = min(remaining_payment, remaining_principal)
                 entry["remaining_principal"] = remaining_principal - principal_payment
                 total_principal_paid += principal_payment
                 remaining_payment -= principal_payment
+                print(f"[Payment Processing] Principal paid for entry: {principal_payment}, Remaining principal: {entry['remaining_principal']}")
     
-    # Case 2: Payment < Interest Due
+    # Case 2: Payment < Total Interest Due
     else:
         total_interest_paid = remaining_payment
+        remaining_interest_after_payment = total_interest_due - remaining_payment
         
-        # Distribute partial interest payment and carry forward remaining
-        remaining_interest_payment = remaining_payment
-        for entry in landed_entries:
-            if remaining_interest_payment <= 0:
-                break
-            entry_interest = calculate_interest_for_entry(entry, payment_date)
-            if entry_interest > 0:
-                interest_paid_for_entry = min(remaining_interest_payment, entry_interest)
-                entry["accumulated_interest"] = entry_interest - interest_paid_for_entry
-                entry["last_interest_calc_date"] = payment_date.isoformat()
-                remaining_interest_payment -= interest_paid_for_entry
+        print(f"[Payment Processing] Partial interest payment. Remaining interest to carry forward: {remaining_interest_after_payment}")
+        
+        # Distribute the remaining interest proportionally across entries
+        # and update interest start dates
+        if total_interest_due > 0:
+            for i, entry in enumerate(landed_entries):
+                remaining_principal = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
+                if remaining_principal > 0 and entry_interests[i] > 0:
+                    # Calculate proportion of remaining interest for this entry
+                    proportion = entry_interests[i] / total_interest_due
+                    entry_remaining_interest = remaining_interest_after_payment * proportion
+                    
+                    # Set carried forward interest
+                    entry["carried_forward_interest"] = round(entry_remaining_interest, 2)
+                    # Reset interest start date to payment date
+                    entry["interest_start_date"] = payment_date.isoformat()
+                    
+                    print(f"[Payment Processing] Entry {i}: Carried forward interest = {entry['carried_forward_interest']}")
     
-    return landed_entries, round(total_principal_paid, 2), round(total_interest_paid, 2)
+    return landed_entries, round(total_principal_paid, 2), round(total_interest_paid, 2), round(remaining_interest_after_payment, 2)
 
 async def create_ledger_entry(account_id: str, transaction_type: str, amount: float, 
                              principal_amount: float, interest_amount: float, 
-                             balance_amount: float, created_by: str, transaction_date: str = None):
-    """Create a ledger entry"""
+                             balance_amount: float, created_by: str, transaction_date: str = None,
+                             remaining_interest: float = 0.0, remaining_principal: float = 0.0):
+    """Create a ledger entry with full tracking"""
     # Use provided date or current date
     if transaction_date:
         try:
@@ -323,6 +373,8 @@ async def create_ledger_entry(account_id: str, transaction_type: str, amount: fl
         "principal_amount": principal_amount,
         "interest_amount": interest_amount,
         "balance_amount": balance_amount,
+        "remaining_interest": remaining_interest,
+        "remaining_principal": remaining_principal,
         "created_by": created_by,
         "created_at": datetime.now(timezone.utc)
     }
@@ -583,6 +635,21 @@ async def get_account(account_id: str, current_user: dict = Depends(verify_token
             # User can view but not modify
             pass
     
+    # Enrich landed entries with calculated interest details
+    now = datetime.now(timezone.utc)
+    enriched_landed_entries = []
+    for entry in account.get("landed_entries", []):
+        entry_copy = dict(entry)
+        interest_details = calculate_interest_for_entry(entry, now)
+        entry_copy["calculated_interest"] = interest_details.get("calculated_interest", 0)
+        entry_copy["carried_forward_interest"] = interest_details.get("carried_forward_interest", 0)
+        entry_copy["total_interest"] = interest_details.get("interest", 0)
+        entry_copy["days"] = interest_details.get("days", 0)
+        entry_copy["interest_start_date"] = entry.get("interest_start_date") or entry.get("date")
+        enriched_landed_entries.append(entry_copy)
+    
+    account["landed_entries"] = enriched_landed_entries
+    
     totals = calculate_account_totals(account)
     account_data = serialize_doc(account)
     account_data.update(totals)
@@ -599,21 +666,24 @@ async def create_account(account: AccountCreate, current_user: dict = Depends(ve
     for entry in account.landed_entries:
         entry_dict = entry.model_dump()
         entry_dict["remaining_principal"] = entry.amount
-        entry_dict["last_interest_calc_date"] = entry.date
-        entry_dict["accumulated_interest"] = 0.0
+        entry_dict["interest_start_date"] = entry.date
+        entry_dict["carried_forward_interest"] = 0.0
         landed_entries.append(entry_dict)
     
     # Process received entries
     received_entries = []
     if account.received_entries:
-        for recv_entry in account.received_entries:
+        # Sort by date
+        sorted_received = sorted(account.received_entries, key=lambda x: x.date)
+        for recv_entry in sorted_received:
             payment_date = datetime.fromisoformat(recv_entry.date)
-            landed_entries, principal_paid, interest_paid = process_payment(
+            landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
                 landed_entries, recv_entry.amount, payment_date
             )
             recv_dict = recv_entry.model_dump()
             recv_dict["principal_paid"] = principal_paid
             recv_dict["interest_paid"] = interest_paid
+            recv_dict["remaining_interest"] = remaining_interest
             received_entries.append(recv_dict)
     
     account_doc = {
@@ -638,30 +708,35 @@ async def create_account(account: AccountCreate, current_user: dict = Depends(ve
     account_doc["_id"] = result.inserted_id
     
     # Create ledger entries
+    running_balance = 0.0
     for entry in landed_entries:
-        totals = calculate_account_totals(account_doc)
+        running_balance += float(entry["amount"])
         await create_ledger_entry(
             str(result.inserted_id),
             "LANDED",
             entry["amount"],
             entry["amount"],
             0,
-            totals["total_pending_amount"],
+            running_balance,
             str(current_user["_id"]),
-            entry["date"]  # Use the actual landed date
+            entry["date"],
+            remaining_interest=0.0,
+            remaining_principal=running_balance
         )
     
     for entry in received_entries:
-        totals = calculate_account_totals(account_doc)
+        running_balance -= float(entry.get("principal_paid", 0))
         await create_ledger_entry(
             str(result.inserted_id),
             "PAYMENT",
             entry["amount"],
             entry["principal_paid"],
             entry["interest_paid"],
-            totals["total_pending_amount"],
+            running_balance,
             str(current_user["_id"]),
-            entry["date"]  # Use the actual received date
+            entry["date"],
+            remaining_interest=entry.get("remaining_interest", 0),
+            remaining_principal=running_balance
         )
     
     totals = calculate_account_totals(account_doc)
@@ -705,8 +780,8 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
                     "amount": float(entry["amount"]),
                     "interest_rate": float(entry.get("interest_rate", 2)),
                     "remaining_principal": float(entry["amount"]),  # Reset for recalculation
-                    "last_interest_calc_date": entry["date"],  # Reset for recalculation
-                    "accumulated_interest": 0.0  # Reset for recalculation
+                    "interest_start_date": entry["date"],  # Interest starts from landed date
+                    "carried_forward_interest": 0.0  # Reset for recalculation
                 }
                 landed_entries.append(processed_entry)
         update_data["landed_entries"] = landed_entries
@@ -716,15 +791,15 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
         # Reset them for recalculation
         for entry in landed_entries:
             entry["remaining_principal"] = float(entry["amount"])
-            entry["last_interest_calc_date"] = entry["date"]
-            entry["accumulated_interest"] = 0.0
+            entry["interest_start_date"] = entry["date"]
+            entry["carried_forward_interest"] = 0.0
         update_data["landed_entries"] = landed_entries
     
     # Process received entries - recalculate payment distribution
+    total_remaining_interest = 0.0
     if "received_entries" in update_data:
         landed_entries = update_data["landed_entries"]
         received_entries = []
-        new_ledger_entries = []
         
         # Sort received entries by date
         raw_received = sorted(
@@ -736,26 +811,20 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
             payment_date = datetime.fromisoformat(recv_entry["date"])
             payment_amount = float(recv_entry["amount"])
             
-            # Process payment through all landed entries
-            landed_entries, principal_paid, interest_paid = process_payment(
+            # Process payment through all landed entries (now returns 4 values)
+            landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
                 landed_entries, payment_amount, payment_date
             )
+            total_remaining_interest = remaining_interest
             
             processed_entry = {
                 "date": recv_entry["date"],
                 "amount": payment_amount,
                 "principal_paid": principal_paid,
-                "interest_paid": interest_paid
+                "interest_paid": interest_paid,
+                "remaining_interest": remaining_interest
             }
             received_entries.append(processed_entry)
-            
-            # Track new ledger entries needed
-            new_ledger_entries.append({
-                "date": recv_entry["date"],
-                "amount": payment_amount,
-                "principal_paid": principal_paid,
-                "interest_paid": interest_paid
-            })
         
         update_data["received_entries"] = received_entries
         update_data["landed_entries"] = landed_entries
@@ -786,12 +855,15 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
             0,
             running_balance,
             str(current_user["_id"]),
-            entry["date"]
+            entry["date"],
+            remaining_interest=0.0,
+            remaining_principal=running_balance
         )
     
     # Create ledger entries for received entries
     for entry in updated_account.get("received_entries", []):
         running_balance -= float(entry.get("principal_paid", 0))
+        remaining_interest = float(entry.get("remaining_interest", 0))
         await create_ledger_entry(
             account_id,
             "PAYMENT",
@@ -800,7 +872,9 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
             entry.get("interest_paid", 0),
             running_balance,
             str(current_user["_id"]),
-            entry["date"]
+            entry["date"],
+            remaining_interest=remaining_interest,
+            remaining_principal=running_balance
         )
     
     totals = calculate_account_totals(updated_account)
@@ -879,14 +953,15 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
     payment_date = datetime.fromisoformat(entry.date)
     landed_entries = account.get("landed_entries", [])
     
-    # Process payment
-    landed_entries, principal_paid, interest_paid = process_payment(
+    # Process payment (now returns 4 values)
+    landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
         landed_entries, entry.amount, payment_date
     )
     
     recv_dict = entry.model_dump()
     recv_dict["principal_paid"] = principal_paid
     recv_dict["interest_paid"] = interest_paid
+    recv_dict["remaining_interest"] = remaining_interest
     
     await accounts_collection.update_one(
         {"_id": ObjectId(account_id)},
@@ -903,21 +978,28 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
     # Create ledger entry
     updated_account = await accounts_collection.find_one({"_id": ObjectId(account_id)})
     totals = calculate_account_totals(updated_account)
+    
+    # Calculate running balance for ledger
+    running_balance = sum(float(e.get("remaining_principal", e.get("amount", 0))) for e in landed_entries)
+    
     await create_ledger_entry(
         account_id,
         "PAYMENT",
         entry.amount,
         principal_paid,
         interest_paid,
-        totals["total_pending_amount"],
+        running_balance,
         str(current_user["_id"]),
-        entry.date  # Pass the actual payment date
+        entry.date,
+        remaining_interest=remaining_interest,
+        remaining_principal=running_balance
     )
     
     return {
         "message": "Payment received successfully",
         "principal_paid": principal_paid,
-        "interest_paid": interest_paid
+        "interest_paid": interest_paid,
+        "remaining_interest": remaining_interest
     }
 
 # Ledger Routes

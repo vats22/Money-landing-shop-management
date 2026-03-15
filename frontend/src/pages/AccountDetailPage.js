@@ -311,7 +311,12 @@ export default function AccountDetailPage() {
                         <th className="px-4 py-3 text-left text-sm font-semibold text-slate-900">#</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-slate-900">Date</th>
                         <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Amount</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Interest Rate</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-900">Interest Start From</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Days</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Rate</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Calculated Interest</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Carried Forward</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Total Interest</th>
                         <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Remaining Principal</th>
                       </tr>
                     </thead>
@@ -323,8 +328,23 @@ export default function AccountDetailPage() {
                           <td className="px-4 py-3 text-sm font-mono text-right text-emerald-700">
                             {formatCurrency(entry.amount)}
                           </td>
+                          <td className="px-4 py-3 text-sm text-slate-600">
+                            {formatDate(entry.interest_start_date || entry.date)}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-mono text-right text-slate-600">
+                            {entry.days || 0}
+                          </td>
                           <td className="px-4 py-3 text-sm font-mono text-right text-slate-600">
                             {entry.interest_rate}%
+                          </td>
+                          <td className="px-4 py-3 text-sm font-mono text-right text-blue-600">
+                            {formatCurrency(entry.calculated_interest || 0)}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-mono text-right text-orange-600">
+                            {formatCurrency(entry.carried_forward_interest || 0)}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-mono text-right font-medium text-red-600">
+                            {formatCurrency(entry.total_interest || 0)}
                           </td>
                           <td className="px-4 py-3 text-sm font-mono text-right text-amber-700">
                             {formatCurrency(entry.remaining_principal)}
@@ -338,7 +358,10 @@ export default function AccountDetailPage() {
                         <td className="px-4 py-3 text-sm font-mono font-bold text-right text-emerald-700">
                           {formatCurrency(account.total_landed_amount)}
                         </td>
-                        <td></td>
+                        <td colSpan={5}></td>
+                        <td className="px-4 py-3 text-sm font-mono font-bold text-right text-red-600">
+                          {formatCurrency(account.total_pending_interest)}
+                        </td>
                         <td className="px-4 py-3 text-sm font-mono font-bold text-right text-amber-700">
                           {formatCurrency(account.total_pending_amount)}
                         </td>
@@ -432,9 +455,10 @@ export default function AccountDetailPage() {
                         <th className="px-4 py-3 text-left text-sm font-semibold text-slate-900">Date</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-slate-900">Type</th>
                         <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Amount</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Principal</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Interest</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Balance</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Interest Paid</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Principal Paid</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Remaining Interest</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-slate-900">Remaining Principal</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -458,14 +482,17 @@ export default function AccountDetailPage() {
                           <td className="px-4 py-3 text-sm font-mono text-right">
                             {formatCurrency(entry.amount)}
                           </td>
-                          <td className="px-4 py-3 text-sm font-mono text-right text-emerald-600">
-                            {formatCurrency(entry.principal_amount)}
-                          </td>
                           <td className="px-4 py-3 text-sm font-mono text-right text-amber-600">
                             {formatCurrency(entry.interest_amount)}
                           </td>
+                          <td className="px-4 py-3 text-sm font-mono text-right text-emerald-600">
+                            {formatCurrency(entry.principal_amount)}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-mono text-right text-red-600">
+                            {formatCurrency(entry.remaining_interest || 0)}
+                          </td>
                           <td className="px-4 py-3 text-sm font-mono text-right font-medium">
-                            {formatCurrency(entry.balance_amount)}
+                            {formatCurrency(entry.remaining_principal || entry.balance_amount)}
                           </td>
                         </tr>
                       ))}

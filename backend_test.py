@@ -10,7 +10,7 @@ from datetime import datetime, date
 from typing import Optional, Dict, Any
 
 class LendLedgerAPITester:
-    def __init__(self, base_url: str = "https://71b2ff06-e750-4d79-b6ec-a0f83b706389.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://loan-ledger-16.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.token = None
         self.tests_run = 0
@@ -20,6 +20,7 @@ class LendLedgerAPITester:
         # Test data storage
         self.created_account_id = None
         self.created_user_id = None
+        self.specific_test_accounts = []
 
     def log_test(self, name: str, success: bool, details: str = "", response_data: Any = None):
         """Log test result"""
@@ -364,6 +365,244 @@ class LendLedgerAPITester:
         
         return cleanup_success
 
+    def test_interest_calculation_scenario_1(self):
+        """Test 1 - Partial interest payment scenario"""
+        print("\n🔢 Testing Interest Calculation Scenario 1: Partial Interest Payment")
+        
+        # Create account with two landed entries with different rates
+        account_data = {
+            "opening_date": "2025-12-15",
+            "name": "Interest Test Customer 1",
+            "village": "Test Village",
+            "status": "continue",
+            "details": "Test account for interest calculation - Scenario 1",
+            "jewellery_items": [],
+            "landed_entries": [
+                {
+                    "date": "2025-12-15",
+                    "amount": 15000.0,
+                    "interest_rate": 2.5
+                },
+                {
+                    "date": "2026-01-15",
+                    "amount": 5000.0,
+                    "interest_rate": 3.0
+                }
+            ],
+            "received_entries": [
+                {
+                    "date": "2026-03-15",
+                    "amount": 1020.0
+                }
+            ]
+        }
+        
+        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
+        
+        if success and 'id' in data:
+            account_id = data['id']
+            self.specific_test_accounts.append(account_id)
+            
+            # Check the total pending interest should be 400 (not 0)
+            expected_pending_interest = 400.0
+            actual_pending_interest = data.get('total_pending_interest', 0)
+            
+            if abs(actual_pending_interest - expected_pending_interest) < 1.0:  # Allow small floating point differences
+                self.log_test("Interest Calc Scenario 1", True, "", 
+                            {"expected_pending_interest": expected_pending_interest, 
+                             "actual_pending_interest": actual_pending_interest})
+                return True
+            else:
+                self.log_test("Interest Calc Scenario 1", False, 
+                            f"Expected pending interest: {expected_pending_interest}, got: {actual_pending_interest}", data)
+                return False
+        else:
+            self.log_test("Interest Calc Scenario 1", False, f"Status: {status}", data)
+            return False
+
+    def test_interest_calculation_scenario_2(self):
+        """Test 2 - Payment greater than interest scenario"""
+        print("\n🔢 Testing Interest Calculation Scenario 2: Payment Greater Than Interest")
+        
+        account_data = {
+            "opening_date": "2025-01-01",
+            "name": "Interest Test Customer 2",
+            "village": "Test Village",
+            "status": "continue",
+            "details": "Test account for interest calculation - Scenario 2",
+            "jewellery_items": [],
+            "landed_entries": [
+                {
+                    "date": "2025-01-01",
+                    "amount": 10000.0,
+                    "interest_rate": 2.0
+                }
+            ],
+            "received_entries": [
+                {
+                    "date": "2025-02-01",
+                    "amount": 800.0  # Should be greater than 1 month interest (≈66.67)
+                }
+            ]
+        }
+        
+        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
+        
+        if success and 'id' in data:
+            account_id = data['id']
+            self.specific_test_accounts.append(account_id)
+            
+            # Check that interest was paid first, then principal was reduced
+            received_entries = data.get('received_entries', [])
+            if received_entries:
+                entry = received_entries[0]
+                interest_paid = entry.get('interest_paid', 0)
+                principal_paid = entry.get('principal_paid', 0)
+                
+                # Interest should be paid first
+                if interest_paid > 0 and principal_paid > 0:
+                    self.log_test("Interest Calc Scenario 2", True, "", 
+                                {"interest_paid": interest_paid, "principal_paid": principal_paid})
+                    return True
+                else:
+                    self.log_test("Interest Calc Scenario 2", False, 
+                                f"Expected both interest and principal payment, got interest: {interest_paid}, principal: {principal_paid}")
+                    return False
+            else:
+                self.log_test("Interest Calc Scenario 2", False, "No received entries found", data)
+                return False
+        else:
+            self.log_test("Interest Calc Scenario 2", False, f"Status: {status}", data)
+            return False
+
+    def test_multiple_landed_entries_calculation(self):
+        """Test 3 - Multiple landed entries with different rates"""
+        print("\n🔢 Testing Multiple Landed Entries Interest Calculation")
+        
+        account_data = {
+            "opening_date": "2025-01-01",
+            "name": "Multiple Entries Test Customer",
+            "village": "Test Village",
+            "status": "continue",
+            "details": "Test account for multiple landed entries",
+            "jewellery_items": [],
+            "landed_entries": [
+                {
+                    "date": "2025-01-01",
+                    "amount": 10000.0,
+                    "interest_rate": 2.0
+                },
+                {
+                    "date": "2025-01-15",
+                    "amount": 5000.0,
+                    "interest_rate": 3.0
+                },
+                {
+                    "date": "2025-02-01",
+                    "amount": 7500.0,
+                    "interest_rate": 2.5
+                }
+            ],
+            "received_entries": []
+        }
+        
+        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
+        
+        if success and 'id' in data:
+            account_id = data['id']
+            self.specific_test_accounts.append(account_id)
+            
+            # Verify each landed entry has its own interest calculation
+            landed_entries = data.get('landed_entries', [])
+            if len(landed_entries) == 3:
+                # Check that each entry maintains its own interest rate and calculation
+                rates_match = all(entry.get('interest_rate') in [2.0, 3.0, 2.5] for entry in landed_entries)
+                all_have_remaining_principal = all('remaining_principal' in entry for entry in landed_entries)
+                
+                if rates_match and all_have_remaining_principal:
+                    self.log_test("Multiple Landed Entries", True, "", 
+                                {"entries_count": len(landed_entries), "rates": [e.get('interest_rate') for e in landed_entries]})
+                    return True
+                else:
+                    self.log_test("Multiple Landed Entries", False, 
+                                "Entries missing required fields or incorrect rates")
+                    return False
+            else:
+                self.log_test("Multiple Landed Entries", False, 
+                            f"Expected 3 landed entries, got {len(landed_entries)}")
+                return False
+        else:
+            self.log_test("Multiple Landed Entries", False, f"Status: {status}", data)
+            return False
+
+    def test_interest_carry_forward(self):
+        """Test 4 - Interest carry forward after partial payment"""
+        print("\n🔢 Testing Interest Carry Forward")
+        
+        # Create account and then add partial payment
+        account_data = {
+            "opening_date": "2025-01-01",
+            "name": "Carry Forward Test Customer",
+            "village": "Test Village",
+            "status": "continue",
+            "details": "Test account for interest carry forward",
+            "jewellery_items": [],
+            "landed_entries": [
+                {
+                    "date": "2025-01-01",
+                    "amount": 20000.0,
+                    "interest_rate": 3.0
+                }
+            ],
+            "received_entries": []
+        }
+        
+        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
+        
+        if success and 'id' in data:
+            account_id = data['id']
+            self.specific_test_accounts.append(account_id)
+            
+            # Add a small payment that doesn't cover full interest
+            payment_data = {
+                "date": "2025-03-01",  # 2 months later
+                "amount": 200.0  # Less than 2 months interest
+            }
+            
+            payment_success, payment_data_resp, payment_status = self.make_request(
+                'POST', f'/accounts/{account_id}/received', payment_data)
+            
+            if payment_success:
+                remaining_interest = payment_data_resp.get('remaining_interest', 0)
+                if remaining_interest > 0:
+                    self.log_test("Interest Carry Forward", True, "", 
+                                {"remaining_interest": remaining_interest})
+                    return True
+                else:
+                    self.log_test("Interest Carry Forward", False, 
+                                f"Expected remaining interest > 0, got {remaining_interest}")
+                    return False
+            else:
+                self.log_test("Interest Carry Forward", False, f"Payment failed: {payment_status}")
+                return False
+        else:
+            self.log_test("Interest Carry Forward", False, f"Account creation failed: {status}")
+            return False
+
+    def cleanup_specific_test_accounts(self):
+        """Clean up specific test accounts"""
+        cleanup_success = True
+        
+        for account_id in self.specific_test_accounts:
+            success, data, status = self.make_request('DELETE', f'/accounts/{account_id}')
+            if success:
+                print(f"✅ Cleaned up test account: {account_id}")
+            else:
+                print(f"⚠️  Failed to cleanup test account: {account_id}")
+                cleanup_success = False
+        
+        return cleanup_success
+
     def run_all_tests(self):
         """Run all API tests"""
         print("🚀 Starting LendLedger Backend API Tests...")
@@ -405,9 +644,17 @@ class LendLedgerAPITester:
         if self.test_create_user():
             self.test_update_user_permissions()
         
+        # Specific Interest Calculation Tests
+        print("\n🔢 Testing Interest Calculation Scenarios...")
+        self.test_interest_calculation_scenario_1()
+        self.test_interest_calculation_scenario_2() 
+        self.test_multiple_landed_entries_calculation()
+        self.test_interest_carry_forward()
+        
         # Cleanup
         print("\n🧹 Cleaning up test data...")
         self.cleanup_test_data()
+        self.cleanup_specific_test_accounts()
         
         return True
 
