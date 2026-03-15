@@ -42,7 +42,7 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - User management with permissions
 - Dashboard summary calculations
 
-### Bug Fixes (March 14, 2026)
+### Bug Fixes (March 14-15, 2026)
 - Fixed: Ledger entries now use actual transaction date instead of current date
 - Fixed: Edit form preserves existing entry data (remaining_principal, accumulated_interest, etc.)
 - Fixed: Null value handling in interest calculations for legacy accounts
@@ -50,6 +50,15 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - Fixed: Payment processing correctly distributes between interest (first) and principal
 - Fixed: Ledger regenerated on account update to reflect correct payment distribution
 - Fixed: Add received entry endpoint passes correct date to ledger entry
+
+### Major Interest Calculation Refactor (March 15, 2026)
+- **Interest Formula**: Interest = (Principal × Rate × Days) / (100 × 30)
+- **Payment Distribution Logic**:
+  - Case 1 (Payment >= Interest): Pay all interest, remaining reduces principal (FIFO - oldest first)
+  - Case 2 (Payment < Interest): Pay partial interest, **carry forward remaining** (no longer resets to 0)
+- **New Landed Entry Table Columns**: Interest Start From, Days, Calculated Interest, Carried Forward, Total Interest
+- **New Ledger Columns**: Remaining Interest, Remaining Principal
+- **Interest Start Date Logic**: Updates to last payment date after receiving payment
 
 ### Frontend Features
 - Professional login page with split design
