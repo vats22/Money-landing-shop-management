@@ -91,6 +91,11 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - [x] Min date validation on landed/received entries = account opening date (frontend + backend)
 - [x] Max date validation on entries = current date (frontend + backend)
 
+### UI/UX Improvements (Session 3)
+- [x] Accounts page filters redesigned to inline flex layout (single row)
+- [x] Sidebar is now collapsible/toggleable on desktop (72px collapsed, 256px expanded)
+- [x] History tab properly interleaves close/reopen events by array index (chronological order)
+
 ## Prioritized Backlog
 
 ### P2 (Medium Priority) - Next
