@@ -207,8 +207,8 @@ export default function AccountsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="w-48">
               <Input
                 data-testid="search-input"
                 placeholder="Search name / account #"
@@ -218,35 +218,39 @@ export default function AccountsPage() {
               />
             </div>
             {/* Searchable village dropdown */}
-            <SearchableDropdown
-              options={villages}
-              value={villageFilter}
-              onChange={setVillageFilter}
-              placeholder="All Villages"
-              searchPlaceholder="Search village..."
-              testId="village-filter"
-            />
-            <Select
-              data-testid="status-filter"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">All Status</option>
-              <option value="continue">Continue</option>
-              <option value="closed">Closed</option>
-            </Select>
+            <div className="w-40">
+              <SearchableDropdown
+                options={villages}
+                value={villageFilter}
+                onChange={setVillageFilter}
+                placeholder="All Villages"
+                searchPlaceholder="Search village..."
+                testId="village-filter"
+              />
+            </div>
+            <div className="w-36">
+              <Select
+                data-testid="status-filter"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">All Status</option>
+                <option value="continue">Continue</option>
+                <option value="closed">Closed</option>
+              </Select>
+            </div>
             {/* Date range picker */}
-            <DateRangePicker
-              startDate={startDate}
-              endDate={endDate}
-              onChange={({ startDate: s, endDate: e }) => {
-                setStartDate(s);
-                setEndDate(e);
-              }}
-              maxDate={getToday()}
-            />
-          </div>
-          <div className="mt-4 flex justify-end">
+            <div className="w-52">
+              <DateRangePicker
+                startDate={startDate}
+                endDate={endDate}
+                onChange={({ startDate: s, endDate: e }) => {
+                  setStartDate(s);
+                  setEndDate(e);
+                }}
+                maxDate={getToday()}
+              />
+            </div>
             <Button onClick={handleSearch} data-testid="apply-filters-btn">
               <Search className="h-4 w-4 mr-2" />
               Apply Filters

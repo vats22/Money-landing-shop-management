@@ -126,19 +126,28 @@ export default function AccountDetailPage() {
     { id: 'history', label: 'History', icon: Clock },
   ];
 
-  // Build history events from close_history + reopen_history
+  // Build history events by interleaving close_history and reopen_history by index
+  // Chronological order: close[0] → reopen[0] → close[1] → reopen[1] → ...
   const historyEvents = [];
-  (account.close_history || []).forEach(h => {
-    historyEvents.push({ type: 'CLOSED', date: h.closed_at, by: h.closed_by_name, remarks: h.remarks, pending: h.final_pending_amount, interest: h.final_pending_interest });
-  });
-  (account.reopen_history || []).forEach(h => {
-    historyEvents.push({ type: 'REOPENED', date: h.reopened_at, by: h.reopened_by_name, reason: h.reason });
-  });
+  const closes = account.close_history || [];
+  const reopens = account.reopen_history || [];
+  const maxLen = Math.max(closes.length, reopens.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < closes.length) {
+      const h = closes[i];
+      historyEvents.push({ type: 'CLOSED', date: h.closed_at, by: h.closed_by_name, remarks: h.remarks, pending: h.final_pending_amount, interest: h.final_pending_interest });
+    }
+    if (i < reopens.length) {
+      const h = reopens[i];
+      historyEvents.push({ type: 'REOPENED', date: h.reopened_at, by: h.reopened_by_name, reason: h.reason });
+    }
+  }
   // If no close_history but account was closed before (legacy data)
   if (historyEvents.length === 0 && account.closed_at) {
     historyEvents.push({ type: 'CLOSED', date: account.closed_at, by: account.closed_by_name, remarks: account.close_remarks, pending: account.final_pending_amount, interest: account.final_pending_interest });
   }
-  historyEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+  // Reverse for descending order (newest first)
+  historyEvents.reverse();
 
   return (
     <div className="space-y-6 animate-fadeIn" data-testid="account-detail-page">
