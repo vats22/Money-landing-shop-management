@@ -23,7 +23,9 @@ import {
   BookOpen,
   Lock,
   Unlock,
-  AlertCircle
+  AlertCircle,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
 
 const getToday = () => new Date().toISOString().split('T')[0];
@@ -173,6 +175,49 @@ export default function AccountDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Export Buttons */}
+          <button
+            onClick={async () => {
+              try {
+                const response = await api.get(`/api/export/accounts/${id}/excel`, { responseType: 'blob' });
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `${account.account_number}_details.xlsx`);
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                toast.success('Excel exported successfully');
+              } catch { toast.error('Export failed'); }
+            }}
+            data-testid="export-excel-btn"
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
+            title="Export to Excel"
+          >
+            <FileSpreadsheet className="h-5 w-5" />
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const response = await api.get(`/api/export/accounts/${id}/pdf`, { responseType: 'blob' });
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `${account.account_number}_details.pdf`);
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                toast.success('PDF exported successfully');
+              } catch { toast.error('Export failed'); }
+            }}
+            data-testid="export-pdf-btn"
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
+            title="Export to PDF"
+          >
+            <Download className="h-5 w-5" />
+          </button>
           {/* Close Account Button - only if not closed and user has permission */}
           {!isClosed && account.user_can_close && (
             <Button 

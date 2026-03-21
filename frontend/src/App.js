@@ -11,7 +11,8 @@ import {
   Menu,
   X,
   Gem,
-  ChevronRight
+  ChevronRight,
+  BarChart3
 } from 'lucide-react';
 
 // Pages
@@ -21,6 +22,7 @@ import AccountsPage from './pages/AccountsPage';
 import AccountDetailPage from './pages/AccountDetailPage';
 import AccountFormPage from './pages/AccountFormPage';
 import UsersPage from './pages/UsersPage';
+import ReportsPage from './pages/ReportsPage';
 
 // Protected Route Wrapper
 const ProtectedRoute = () => {
@@ -50,6 +52,7 @@ const DashboardLayout = () => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Accounts', href: '/accounts', icon: FileText },
+    { name: 'Reports', href: '/reports', icon: BarChart3 },
     { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   ];
 
@@ -185,6 +188,7 @@ function App() {
             <Route path="/accounts/new" element={<AccountFormPage />} />
             <Route path="/accounts/:id" element={<AccountDetailPage />} />
             <Route path="/accounts/:id/edit" element={<AccountFormPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
             <Route path="/users" element={<UsersPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -192,12 +192,36 @@ export default function AccountsPage() {
           <p className="text-slate-500 mt-1">Manage lending accounts</p>
         </div>
         {canAdd && (
-          <Link to="/accounts/new">
-            <Button data-testid="add-account-btn">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Account
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  const response = await api.get('/api/export/accounts/excel', { responseType: 'blob' });
+                  const url = window.URL.createObjectURL(new Blob([response.data]));
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.setAttribute('download', 'accounts_export.xlsx');
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  window.URL.revokeObjectURL(url);
+                  toast.success('Export downloaded');
+                } catch { toast.error('Export failed'); }
+              }}
+              data-testid="export-accounts-btn"
+              className="flex items-center gap-2 px-3 py-2.5 border border-slate-300 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
+              title="Export to Excel"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <Link to="/accounts/new">
+              <Button data-testid="add-account-btn">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Account
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 

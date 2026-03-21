@@ -12,6 +12,15 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
 from dotenv import load_dotenv
 import math
+import io
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 load_dotenv()
 
@@ -1204,6 +1213,431 @@ async def get_account_ledger(account_id: str, current_user: dict = Depends(verif
 async def get_villages(current_user: dict = Depends(verify_token)):
     villages = await accounts_collection.distinct("village")
     return villages
+
+# Reports API Routes
+@app.get("/api/reports/village-summary")
+async def village_summary_report(current_user: dict = Depends(verify_token)):
+    """Get lending summary grouped by village"""
+    accounts = await accounts_collection.find().to_list(10000)
+    village_data = {}
+    for account in accounts:
+        village = account.get("village", "Unknown")
+        if village not in village_data:
+            village_data[village] = {"village": village, "total_accounts": 0, "active_accounts": 0,
+                                     "total_landed": 0, "total_received": 0, "total_pending": 0, "total_interest": 0}
+        village_data[village]["total_accounts"] += 1
+        if account.get("status") == "continue":
+            village_data[village]["active_accounts"] += 1
+        totals = calculate_account_totals(account)
+        village_data[village]["total_landed"] += totals["total_landed_amount"]
+        village_data[village]["total_received"] += totals["total_received_amount"]
+        village_data[village]["total_pending"] += totals["total_pending_amount"]
+        village_data[village]["total_interest"] += totals["total_pending_interest"]
+    result = []
+    for v in village_data.values():
+        result.append({k: round(v2, 2) if isinstance(v2, float) else v2 for k, v2 in v.items()})
+    return sorted(result, key=lambda x: x["total_pending"], reverse=True)
+
+@app.get("/api/reports/monthly-trend")
+async def monthly_trend_report(current_user: dict = Depends(verify_token)):
+    """Get monthly lending and collection trend"""
+    accounts = await accounts_collection.find().to_list(10000)
+    monthly_data = {}
+    for account in accounts:
+        for entry in account.get("landed_entries", []):
+            month_key = entry.get("date", "")[:7]  # YYYY-MM
+            if month_key:
+                if month_key not in monthly_data:
+                    monthly_data[month_key] = {"month": month_key, "landed": 0, "received": 0, "accounts_opened": 0}
+                monthly_data[month_key]["landed"] += float(entry.get("amount", 0))
+        for entry in account.get("received_entries", []):
+            month_key = entry.get("date", "")[:7]
+            if month_key:
+                if month_key not in monthly_data:
+                    monthly_data[month_key] = {"month": month_key, "landed": 0, "received": 0, "accounts_opened": 0}
+                monthly_data[month_key]["received"] += float(entry.get("amount", 0))
+        opening_month = account.get("opening_date", "")[:7]
+        if opening_month:
+            if opening_month not in monthly_data:
+                monthly_data[opening_month] = {"month": opening_month, "landed": 0, "received": 0, "accounts_opened": 0}
+            monthly_data[opening_month]["accounts_opened"] += 1
+    result = []
+    for v in monthly_data.values():
+        result.append({k: round(v2, 2) if isinstance(v2, float) else v2 for k, v2 in v.items()})
+    return sorted(result, key=lambda x: x["month"])
+
+@app.get("/api/reports/interest-rate-distribution")
+async def interest_rate_distribution(current_user: dict = Depends(verify_token)):
+    """Get distribution of interest rates across active landed entries"""
+    accounts = await accounts_collection.find({"status": "continue"}).to_list(10000)
+    rate_data = {}
+    for account in accounts:
+        for entry in account.get("landed_entries", []):
+            remaining = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
+            if remaining > 0:
+                rate = str(entry.get("interest_rate", 0))
+                if rate not in rate_data:
+                    rate_data[rate] = {"rate": f"{rate}%", "count": 0, "total_amount": 0}
+                rate_data[rate]["count"] += 1
+                rate_data[rate]["total_amount"] += remaining
+    result = []
+    for v in rate_data.values():
+        result.append({k: round(v2, 2) if isinstance(v2, float) else v2 for k, v2 in v.items()})
+    return sorted(result, key=lambda x: float(x["rate"].replace("%", "")))
+
+@app.get("/api/reports/top-borrowers")
+async def top_borrowers_report(current_user: dict = Depends(verify_token)):
+    """Get top borrowers by pending amount"""
+    accounts = await accounts_collection.find().to_list(10000)
+    borrowers = []
+    for account in accounts:
+        totals = calculate_account_totals(account)
+        if totals["total_pending_amount"] > 0:
+            borrowers.append({
+                "account_number": account.get("account_number"),
+                "name": account.get("name"),
+                "village": account.get("village"),
+                "total_landed": totals["total_landed_amount"],
+                "total_pending": totals["total_pending_amount"],
+                "total_interest": totals["total_pending_interest"],
+                "status": account.get("status")
+            })
+    return sorted(borrowers, key=lambda x: x["total_pending"], reverse=True)[:20]
+
+# Export API Routes
+@app.get("/api/export/accounts/excel")
+async def export_accounts_excel(current_user: dict = Depends(verify_token)):
+    """Export all accounts to Excel"""
+    accounts = await accounts_collection.find().sort("account_number", 1).to_list(10000)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Accounts"
+    
+    header_fill = PatternFill(start_color="1a365d", end_color="1a365d", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    headers = ["Account No", "Name", "Village", "Opening Date", "Status",
+               "Total Landed", "Total Received", "Pending Principal", "Pending Interest",
+               "Total Jewellery Weight (g)"]
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_align
+        cell.border = thin_border
+    
+    for row_idx, account in enumerate(accounts, 2):
+        totals = calculate_account_totals(account)
+        row_data = [
+            account.get("account_number", ""),
+            account.get("name", ""),
+            account.get("village", ""),
+            account.get("opening_date", ""),
+            account.get("status", ""),
+            totals["total_landed_amount"],
+            totals["total_received_amount"],
+            totals["total_pending_amount"],
+            totals["total_pending_interest"],
+            totals["total_jewellery_weight"]
+        ]
+        for col, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_idx, column=col, value=value)
+            cell.border = thin_border
+            if isinstance(value, float):
+                cell.number_format = '#,##0.00'
+    
+    for col in range(1, len(headers) + 1):
+        ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = 18
+    
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=accounts_export.xlsx"}
+    )
+
+@app.get("/api/export/accounts/{account_id}/excel")
+async def export_account_detail_excel(account_id: str, current_user: dict = Depends(verify_token)):
+    """Export single account details to Excel"""
+    account = await accounts_collection.find_one({"_id": ObjectId(account_id)})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    totals = calculate_account_totals(account)
+    wb = Workbook()
+    
+    header_fill = PatternFill(start_color="1a365d", end_color="1a365d", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    # Overview sheet
+    ws = wb.active
+    ws.title = "Overview"
+    overview_data = [
+        ["Account Number", account.get("account_number", "")],
+        ["Name", account.get("name", "")],
+        ["Village", account.get("village", "")],
+        ["Opening Date", account.get("opening_date", "")],
+        ["Status", account.get("status", "")],
+        ["Total Landed", totals["total_landed_amount"]],
+        ["Total Received", totals["total_received_amount"]],
+        ["Pending Principal", totals["total_pending_amount"]],
+        ["Pending Interest", totals["total_pending_interest"]],
+        ["Total Jewellery Weight (g)", totals["total_jewellery_weight"]],
+    ]
+    for row_idx, (label, value) in enumerate(overview_data, 1):
+        ws.cell(row=row_idx, column=1, value=label).font = Font(bold=True)
+        cell = ws.cell(row=row_idx, column=2, value=value)
+        if isinstance(value, float):
+            cell.number_format = '#,##0.00'
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 25
+    
+    # Jewellery sheet
+    ws_jewel = wb.create_sheet("Jewellery")
+    jewel_headers = ["Item Name", "Weight (g)"]
+    for col, h in enumerate(jewel_headers, 1):
+        cell = ws_jewel.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = thin_border
+    for row_idx, item in enumerate(account.get("jewellery_items", []), 2):
+        ws_jewel.cell(row=row_idx, column=1, value=item.get("name", "")).border = thin_border
+        ws_jewel.cell(row=row_idx, column=2, value=item.get("weight", 0)).border = thin_border
+    ws_jewel.column_dimensions['A'].width = 30
+    ws_jewel.column_dimensions['B'].width = 15
+    
+    # Landed Entries sheet
+    ws_landed = wb.create_sheet("Landed Entries")
+    landed_headers = ["Date", "Amount", "Interest Rate (%)", "Remaining Principal", "Interest Start Date"]
+    for col, h in enumerate(landed_headers, 1):
+        cell = ws_landed.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = thin_border
+    for row_idx, entry in enumerate(account.get("landed_entries", []), 2):
+        ws_landed.cell(row=row_idx, column=1, value=entry.get("date", "")).border = thin_border
+        ws_landed.cell(row=row_idx, column=2, value=float(entry.get("amount", 0))).border = thin_border
+        ws_landed.cell(row=row_idx, column=3, value=float(entry.get("interest_rate", 0))).border = thin_border
+        ws_landed.cell(row=row_idx, column=4, value=float(entry.get("remaining_principal", 0))).border = thin_border
+        ist = entry.get("interest_start_date", entry.get("date", ""))
+        ws_landed.cell(row=row_idx, column=5, value=str(ist)[:10] if ist else "").border = thin_border
+    for col in range(1, 6):
+        ws_landed.column_dimensions[ws_landed.cell(row=1, column=col).column_letter].width = 20
+    
+    # Received Entries sheet
+    ws_received = wb.create_sheet("Received Entries")
+    recv_headers = ["Date", "Amount", "Principal Paid", "Interest Paid"]
+    for col, h in enumerate(recv_headers, 1):
+        cell = ws_received.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = thin_border
+    for row_idx, entry in enumerate(account.get("received_entries", []), 2):
+        ws_received.cell(row=row_idx, column=1, value=entry.get("date", "")).border = thin_border
+        ws_received.cell(row=row_idx, column=2, value=float(entry.get("amount", 0))).border = thin_border
+        ws_received.cell(row=row_idx, column=3, value=float(entry.get("principal_paid", 0))).border = thin_border
+        ws_received.cell(row=row_idx, column=4, value=float(entry.get("interest_paid", 0))).border = thin_border
+    for col in range(1, 5):
+        ws_received.column_dimensions[ws_received.cell(row=1, column=col).column_letter].width = 20
+    
+    # Ledger sheet
+    ws_ledger = wb.create_sheet("Ledger")
+    ledger_entries = await ledger_collection.find({"account_id": account_id}).sort("transaction_date", 1).to_list(1000)
+    ledger_headers = ["Date", "Type", "Amount", "Principal", "Interest", "Balance"]
+    for col, h in enumerate(ledger_headers, 1):
+        cell = ws_ledger.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = thin_border
+    for row_idx, entry in enumerate(ledger_entries, 2):
+        txn_date = entry.get("transaction_date")
+        date_str = txn_date.strftime("%Y-%m-%d") if hasattr(txn_date, 'strftime') else str(txn_date)[:10]
+        ws_ledger.cell(row=row_idx, column=1, value=date_str).border = thin_border
+        ws_ledger.cell(row=row_idx, column=2, value=entry.get("transaction_type", "")).border = thin_border
+        ws_ledger.cell(row=row_idx, column=3, value=float(entry.get("amount", 0))).border = thin_border
+        ws_ledger.cell(row=row_idx, column=4, value=float(entry.get("principal_amount", 0))).border = thin_border
+        ws_ledger.cell(row=row_idx, column=5, value=float(entry.get("interest_amount", 0))).border = thin_border
+        ws_ledger.cell(row=row_idx, column=6, value=float(entry.get("balance_amount", 0))).border = thin_border
+    for col in range(1, 7):
+        ws_ledger.column_dimensions[ws_ledger.cell(row=1, column=col).column_letter].width = 18
+    
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    filename = f"{account.get('account_number', 'account')}_details.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.get("/api/export/accounts/{account_id}/pdf")
+async def export_account_detail_pdf(account_id: str, current_user: dict = Depends(verify_token)):
+    """Export single account details to PDF"""
+    account = await accounts_collection.find_one({"_id": ObjectId(account_id)})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    totals = calculate_account_totals(account)
+    ledger_entries = await ledger_collection.find({"account_id": account_id}).sort("transaction_date", 1).to_list(1000)
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Title'], fontSize=16, spaceAfter=12)
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Heading2'], fontSize=12, spaceAfter=8)
+    
+    elements = []
+    
+    # Title
+    elements.append(Paragraph(f"Account: {account.get('account_number', '')}", title_style))
+    elements.append(Paragraph(f"{account.get('name', '')} - {account.get('village', '')}", subtitle_style))
+    elements.append(Spacer(1, 12))
+    
+    # Overview table
+    overview_data = [
+        ["Opening Date", account.get("opening_date", ""), "Status", account.get("status", "").upper()],
+        ["Total Landed", f"{totals['total_landed_amount']:,.2f}", "Total Received", f"{totals['total_received_amount']:,.2f}"],
+        ["Pending Principal", f"{totals['total_pending_amount']:,.2f}", "Pending Interest", f"{totals['total_pending_interest']:,.2f}"],
+        ["Jewellery Weight", f"{totals['total_jewellery_weight']:.2f}g", "", ""],
+    ]
+    overview_table = Table(overview_data, colWidths=[120, 120, 120, 120])
+    overview_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.Color(0.95, 0.95, 0.98)),
+        ('BACKGROUND', (2, 0), (2, -1), colors.Color(0.95, 0.95, 0.98)),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(overview_table)
+    elements.append(Spacer(1, 16))
+    
+    # Jewellery
+    if account.get("jewellery_items"):
+        elements.append(Paragraph("Jewellery Items", subtitle_style))
+        jewel_data = [["Item Name", "Weight (g)"]]
+        for item in account["jewellery_items"]:
+            jewel_data.append([item.get("name", ""), f"{item.get('weight', 0):.2f}"])
+        jewel_table = Table(jewel_data, colWidths=[300, 100])
+        jewel_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.1, 0.21, 0.36)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(jewel_table)
+        elements.append(Spacer(1, 12))
+    
+    # Landed Entries
+    if account.get("landed_entries"):
+        elements.append(Paragraph("Landed Entries", subtitle_style))
+        landed_data = [["Date", "Amount", "Rate (%)", "Remaining", "Interest From"]]
+        for entry in account["landed_entries"]:
+            ist = entry.get("interest_start_date", entry.get("date", ""))
+            landed_data.append([
+                entry.get("date", ""),
+                f"{float(entry.get('amount', 0)):,.2f}",
+                f"{float(entry.get('interest_rate', 0)):.1f}",
+                f"{float(entry.get('remaining_principal', 0)):,.2f}",
+                str(ist)[:10] if ist else ""
+            ])
+        landed_table = Table(landed_data, colWidths=[90, 90, 70, 100, 100])
+        landed_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.1, 0.21, 0.36)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(landed_table)
+        elements.append(Spacer(1, 12))
+    
+    # Received Entries
+    if account.get("received_entries"):
+        elements.append(Paragraph("Received Entries", subtitle_style))
+        recv_data = [["Date", "Amount", "Principal Paid", "Interest Paid"]]
+        for entry in account["received_entries"]:
+            recv_data.append([
+                entry.get("date", ""),
+                f"{float(entry.get('amount', 0)):,.2f}",
+                f"{float(entry.get('principal_paid', 0)):,.2f}",
+                f"{float(entry.get('interest_paid', 0)):,.2f}"
+            ])
+        recv_table = Table(recv_data, colWidths=[110, 110, 110, 110])
+        recv_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.1, 0.21, 0.36)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(recv_table)
+        elements.append(Spacer(1, 12))
+    
+    # Ledger
+    if ledger_entries:
+        elements.append(Paragraph("Account Ledger", subtitle_style))
+        ledger_data = [["Date", "Type", "Amount", "Principal", "Interest", "Balance"]]
+        for entry in ledger_entries:
+            txn_date = entry.get("transaction_date")
+            date_str = txn_date.strftime("%Y-%m-%d") if hasattr(txn_date, 'strftime') else str(txn_date)[:10]
+            ledger_data.append([
+                date_str,
+                entry.get("transaction_type", ""),
+                f"{float(entry.get('amount', 0)):,.2f}",
+                f"{float(entry.get('principal_amount', 0)):,.2f}",
+                f"{float(entry.get('interest_amount', 0)):,.2f}",
+                f"{float(entry.get('balance_amount', 0)):,.2f}"
+            ])
+        ledger_table = Table(ledger_data, colWidths=[80, 80, 80, 80, 80, 80])
+        ledger_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.1, 0.21, 0.36)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(ledger_table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    
+    filename = f"{account.get('account_number', 'account')}_details.pdf"
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 # Initialize admin user on startup
 @app.on_event("startup")
