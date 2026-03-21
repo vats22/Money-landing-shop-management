@@ -1,0 +1,107 @@
+{
+  "summary": "Completed comprehensive testing of Iteration 8 - Bug Fixes. All 22 backend tests passed (100%). All 6 bug fixes verified working correctly through both API and UI testing.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Accounts Page",
+        "issues": ["Default date filter (last 30 days) hides older accounts including closed ones - users need to expand date range to see all accounts"]
+      }
+    ]
+  },
+  "passed_tests": [
+    "Bug 1: Permission update uses matched_count - API returns 200 even when no changes made",
+    "Bug 1: Admin can update user permissions via PUT /api/users/{id}/permissions",
+    "Bug 1: Permission changes reflect when user re-fetches /api/auth/me",
+    "Bug 2: Viewer1 (view-only) - Add Account button hidden on Dashboard",
+    "Bug 2: Viewer1 (view-only) - Add Account button hidden on Accounts page",
+    "Bug 2: Viewer1 (view-only) - Edit/Delete buttons hidden in accounts table, only View visible",
+    "Bug 2: Operator1 - Delete button hidden (no delete permission), Edit visible (has update permission)",
+    "Bug 3: Operator1 sidebar shows Dashboard, Accounts, Reports but NOT Users",
+    "Bug 3: Viewer1 sidebar shows Dashboard, Accounts, Reports but NOT Users",
+    "Bug 4: Village filter is SearchableDropdown with search input inside dropdown",
+    "Bug 4: Villages endpoint returns list of unique villages",
+    "Bug 5: Closed account GET detail shows user_can_edit=false, user_can_delete=false",
+    "Bug 5: Closed account PUT update returns 403",
+    "Bug 5: Closed account DELETE returns 403",
+    "Bug 5: Closed account POST add landed entry returns 403",
+    "Bug 5: Reopen account requires reason (400 if empty)",
+    "Bug 5: After reopen, edit works again",
+    "Bug 5: UI - Closed accounts only show View button (no Edit/Delete)",
+    "Bug 5: UI - Closed account detail shows 'Account Closed' banner with Reopen button",
+    "Bug 6: Dashboard summary returns active totals (total_landed_amount, etc.)",
+    "Bug 6: Dashboard summary returns closed totals (closed_total_landed_amount, etc.)",
+    "Bug 6: Dashboard stats returns total_accounts, active_accounts, closed_accounts",
+    "Bug 6: UI - Dashboard shows separate 'Active Accounts' and 'Closed Accounts' sections",
+    "Bug 7: DateRangePicker shows dual-month calendar",
+    "Bug 7: DateRangePicker has preset buttons (7d, 30d, 90d, 1y)",
+    "Bug 7: DateRangePicker default shows last 30 days range",
+    "Auth: Admin login works",
+    "Auth: Operator1 login works",
+    "Auth: Viewer1 login works",
+    "Auth: /api/auth/me returns user with permissions"
+  ],
+  "bug_fixes_verification": {
+    "bug_1_permissions_reflecting": {
+      "status": "VERIFIED",
+      "details": "Backend uses matched_count instead of modified_count. AuthContext.refreshUser() called on route change."
+    },
+    "bug_2_button_visibility": {
+      "status": "VERIFIED",
+      "details": "Add/Edit/Delete buttons correctly hidden based on user permissions. Viewer sees only View button."
+    },
+    "bug_3_sidebar_nav": {
+      "status": "VERIFIED",
+      "details": "filteredNav correctly filters navigation items. Non-admins don't see Users nav."
+    },
+    "bug_4_village_dropdown": {
+      "status": "VERIFIED",
+      "details": "SearchableDropdown component with search input inside dropdown. Villages endpoint returns unique villages."
+    },
+    "bug_5_closed_accounts": {
+      "status": "VERIFIED",
+      "details": "Backend returns 403 for update/delete/add on closed accounts. UI hides Edit/Delete buttons. Reopen requires reason."
+    },
+    "bug_6_dashboard_separation": {
+      "status": "VERIFIED",
+      "details": "Dashboard summary returns both active and closed totals. UI shows separate sections."
+    },
+    "bug_7_date_range_picker": {
+      "status": "VERIFIED",
+      "details": "DateRangePicker with dual-month calendar and preset buttons (7d, 30d, 90d, 1y)."
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_bug_fixes.py",
+    "/app/test_reports/pytest/pytest_results_iteration8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "All 6 bug fixes implemented correctly",
+    "Permission checks properly implemented in both backend and frontend",
+    "Closed account restrictions working at both API and UI level",
+    "Dashboard correctly separates active vs closed account totals",
+    "SearchableDropdown and DateRangePicker components working as expected"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration8_bug_fixes.py"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "admin": "admin / admin123",
+    "operator1": "operator1 / operator123 (has view/add/update, no delete)",
+    "viewer1": "viewer1 / viewer123 (view only)"
+  },
+  "seed_data_creation": "Backend tests created 6 TEST_ClosedAccountTest accounts for testing closed account restrictions",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 6 bug fixes from iteration 8 verified working. Test credentials: admin/admin123, operator1/operator123, viewer1/viewer123. operator1 ID: 69bebd76b09bf615fb3f0790, viewer1 ID: 69bebd76b09bf615fb3f0791. Default date filter is 30 days - expand to 1 year to see all accounts including closed ones. 8 closed accounts exist in the system."
+}

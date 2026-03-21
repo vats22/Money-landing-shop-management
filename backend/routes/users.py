@@ -89,6 +89,6 @@ async def update_user_permissions(user_id: str, permissions: dict, current_user:
         {"_id": ObjectId(user_id)},
         {"$set": {"permissions": permissions, "updated_at": datetime.now(timezone.utc)}}
     )
-    if result.modified_count == 0:
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "Permissions updated successfully"}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -10,75 +10,46 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { StatusBadge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { ConfirmDialog } from '../components/ui/Modal';
+import { DateRangePicker } from '../components/ui/DateRangePicker';
+import { SearchableDropdown } from '../components/ui/SearchableDropdown';
 import { toast } from 'sonner';
 import {
-  Plus,
-  Search,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Eye,
-  Pencil,
-  Trash2,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  X,
-  Download
+  Plus, Search, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Eye, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Download
 } from 'lucide-react';
 
-// Get date 30 days ago
 const getDefaultStartDate = () => {
   const date = new Date();
   date.setDate(date.getDate() - 30);
   return date.toISOString().split('T')[0];
 };
-
-// Get today's date
 const getToday = () => new Date().toISOString().split('T')[0];
 
 export default function AccountsPage() {
   const navigate = useNavigate();
-  const { user, hasPermission, isAdmin } = useAuth();
+  const { hasPermission, isAdmin } = useAuth();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [villages, setVillages] = useState([]);
-  const [villageSearch, setVillageSearch] = useState('');
-  
-  // Filters - default to past 30 days
+
   const [search, setSearch] = useState('');
   const [villageFilter, setVillageFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [startDate, setStartDate] = useState(getDefaultStartDate());
   const [endDate, setEndDate] = useState(getToday());
-  
-  // Pagination
+
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit] = useState(20);
-  
-  // Sorting
   const [sortBy, setSortBy] = useState('account_number');
   const [sortOrder, setSortOrder] = useState('desc');
-  
-  // Delete dialog
   const [deleteId, setDeleteId] = useState(null);
 
-  // Check permissions
+  const canView = isAdmin || hasPermission('accounts', 'view');
   const canAdd = isAdmin || hasPermission('accounts', 'add');
   const canEdit = isAdmin || hasPermission('accounts', 'update');
   const canDelete = isAdmin || hasPermission('accounts', 'delete');
-
-  // Filter villages based on search
-  const filteredVillages = useMemo(() => {
-    if (!villageSearch) return villages;
-    return villages.filter(v => 
-      v.toLowerCase().includes(villageSearch.toLowerCase())
-    );
-  }, [villages, villageSearch]);
 
   useEffect(() => {
     fetchAccounts();
@@ -89,18 +60,14 @@ export default function AccountsPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-        sort_by: sortBy,
-        sort_order: sortOrder,
+        page: page.toString(), limit: limit.toString(),
+        sort_by: sortBy, sort_order: sortOrder,
       });
-      
       if (search) params.append('search', search);
       if (villageFilter) params.append('village', villageFilter);
       if (statusFilter) params.append('status', statusFilter);
       if (startDate) params.append('start_date', startDate);
       if (endDate) params.append('end_date', endDate);
-      
       const response = await api.get(`/api/accounts?${params}`);
       setAccounts(response.data.accounts);
       setTotalPages(response.data.total_pages);
@@ -121,10 +88,7 @@ export default function AccountsPage() {
     }
   };
 
-  const handleSearch = () => {
-    setPage(1);
-    fetchAccounts();
-  };
+  const handleSearch = () => { setPage(1); fetchAccounts(); };
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -148,21 +112,15 @@ export default function AccountsPage() {
   };
 
   const clearFilters = () => {
-    setSearch('');
-    setVillageFilter('');
-    setVillageSearch('');
-    setStatusFilter('');
-    setStartDate(getDefaultStartDate());
-    setEndDate(getToday());
+    setSearch(''); setVillageFilter(''); setStatusFilter('');
+    setStartDate(getDefaultStartDate()); setEndDate(getToday());
     setPage(1);
-    fetchAccounts();
+    setTimeout(() => fetchAccounts(), 0);
   };
 
   const SortIcon = ({ column }) => {
     if (sortBy !== column) return <ArrowUpDown className="h-4 w-4 opacity-50" />;
-    return sortOrder === 'asc' ? 
-      <ArrowUp className="h-4 w-4" /> : 
-      <ArrowDown className="h-4 w-4" />;
+    return sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
   };
 
   const columns = [
@@ -183,6 +141,15 @@ export default function AccountsPage() {
     { key: 'updated_at', label: 'Updated On' },
   ];
 
+  if (!canView) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <p className="text-xl font-medium text-slate-500">Access Denied</p>
+        <p className="text-slate-400 mt-2">You don't have permission to view accounts</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
@@ -191,38 +158,38 @@ export default function AccountsPage() {
           <h1 className="text-3xl font-bold font-display text-slate-900">Accounts</h1>
           <p className="text-slate-500 mt-1">Manage lending accounts</p>
         </div>
-        {canAdd && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={async () => {
-                try {
-                  const response = await api.get('/api/export/accounts/excel', { responseType: 'blob' });
-                  const url = window.URL.createObjectURL(new Blob([response.data]));
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.setAttribute('download', 'accounts_export.xlsx');
-                  document.body.appendChild(link);
-                  link.click();
-                  link.remove();
-                  window.URL.revokeObjectURL(url);
-                  toast.success('Export downloaded');
-                } catch { toast.error('Export failed'); }
-              }}
-              data-testid="export-accounts-btn"
-              className="flex items-center gap-2 px-3 py-2.5 border border-slate-300 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
-              title="Export to Excel"
-            >
-              <Download className="h-4 w-4" />
-              Export
-            </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const response = await api.get('/api/export/accounts/excel', { responseType: 'blob' });
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', 'accounts_export.xlsx');
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                toast.success('Export downloaded');
+              } catch { toast.error('Export failed'); }
+            }}
+            data-testid="export-accounts-btn"
+            className="flex items-center gap-2 px-3 py-2.5 border border-slate-300 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
+            title="Export to Excel"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </button>
+          {canAdd && (
             <Link to="/accounts/new">
               <Button data-testid="add-account-btn">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Account
               </Button>
             </Link>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -240,7 +207,7 @@ export default function AccountsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="lg:col-span-2">
               <Input
                 data-testid="search-input"
@@ -250,48 +217,15 @@ export default function AccountsPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
-            {/* Village dropdown with search */}
-            <div className="relative">
-              <Input
-                data-testid="village-search"
-                placeholder="Search village..."
-                value={villageSearch}
-                onChange={(e) => {
-                  setVillageSearch(e.target.value);
-                  if (!e.target.value) setVillageFilter('');
-                }}
-                className="mb-1"
-              />
-              {villageSearch && filteredVillages.length > 0 && (
-                <div className="absolute z-20 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-auto">
-                  {filteredVillages.map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => {
-                        setVillageFilter(v);
-                        setVillageSearch(v);
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100"
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {villageFilter && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVillageFilter('');
-                    setVillageSearch('');
-                  }}
-                  className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
+            {/* Searchable village dropdown */}
+            <SearchableDropdown
+              options={villages}
+              value={villageFilter}
+              onChange={setVillageFilter}
+              placeholder="All Villages"
+              searchPlaceholder="Search village..."
+              testId="village-filter"
+            />
             <Select
               data-testid="status-filter"
               value={statusFilter}
@@ -300,27 +234,17 @@ export default function AccountsPage() {
               <option value="">All Status</option>
               <option value="continue">Continue</option>
               <option value="closed">Closed</option>
-              <option value="renewed">Renewed</option>
-              <option value="immediate action needed">Immediate Action</option>
             </Select>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Start Date</label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                max={getToday()}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">End Date</label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                max={getToday()}
-              />
-            </div>
+            {/* Date range picker */}
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onChange={({ startDate: s, endDate: e }) => {
+                setStartDate(s);
+                setEndDate(e);
+              }}
+              maxDate={getToday()}
+            />
           </div>
           <div className="mt-4 flex justify-end">
             <Button onClick={handleSearch} data-testid="apply-filters-btn">
@@ -341,12 +265,14 @@ export default function AccountsPage() {
           ) : accounts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <p className="text-slate-500 mb-4">No accounts found</p>
-              <Link to="/accounts/new">
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Account
-                </Button>
-              </Link>
+              {canAdd && (
+                <Link to="/accounts/new">
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Account
+                  </Button>
+                </Link>
+              )}
             </div>
           ) : (
             <>
@@ -354,36 +280,22 @@ export default function AccountsPage() {
                 <table className="w-full min-w-[1800px]">
                   <thead className="sticky-header">
                     <tr className="border-b border-slate-200">
-                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-900 bg-slate-50">
-                        Actions
-                      </th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-900 bg-slate-50">Actions</th>
                       {columns.map((col) => (
-                        <th
-                          key={col.key}
-                          className="px-4 py-4 text-left text-sm font-semibold text-slate-900 bg-slate-50 whitespace-nowrap"
-                        >
+                        <th key={col.key} className="px-4 py-4 text-left text-sm font-semibold text-slate-900 bg-slate-50 whitespace-nowrap">
                           {col.sortable ? (
-                            <button
-                              onClick={() => handleSort(col.key)}
-                              className="flex items-center gap-1 hover:text-emerald-600 transition-colors"
-                            >
+                            <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 hover:text-emerald-600 transition-colors">
                               {col.label}
                               <SortIcon column={col.key} />
                             </button>
-                          ) : (
-                            col.label
-                          )}
+                          ) : col.label}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {accounts.map((account, idx) => (
-                      <tr 
-                        key={account.id} 
-                        className="hover:bg-slate-50 transition-colors"
-                        style={{ animationDelay: `${idx * 50}ms` }}
-                      >
+                      <tr key={account.id} className="hover:bg-slate-50 transition-colors" style={{ animationDelay: `${idx * 50}ms` }}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
                             <button
@@ -416,51 +328,21 @@ export default function AccountsPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 font-mono text-sm font-medium text-emerald-700">
-                          {account.account_number}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {formatDate(account.opening_date)}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-slate-900">
-                          {account.name}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {account.village}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {account.jewellery_items?.length || 0} items
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-slate-700">
-                          {formatWeight(account.total_jewellery_weight)}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-emerald-700 font-medium">
-                          {formatCurrency(account.total_landed_amount)}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-blue-700">
-                          {formatCurrency(account.total_received_amount)}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-slate-600">
-                          {formatCurrency(account.received_principal)}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-slate-600">
-                          {formatCurrency(account.received_interest)}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-amber-700 font-medium">
-                          {formatCurrency(account.total_pending_amount)}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-red-600 font-medium">
-                          {formatCurrency(account.total_pending_interest)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={account.status} />
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {account.created_by_name || '-'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-500">
-                          {formatDate(account.updated_at)}
-                        </td>
+                        <td className="px-4 py-3 font-mono text-sm font-medium text-emerald-700">{account.account_number}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{formatDate(account.opening_date)}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-900">{account.name}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{account.village}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{account.jewellery_items?.length || 0} items</td>
+                        <td className="px-4 py-3 font-mono text-sm text-slate-700">{formatWeight(account.total_jewellery_weight)}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-emerald-700 font-medium">{formatCurrency(account.total_landed_amount)}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-blue-700">{formatCurrency(account.total_received_amount)}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-slate-600">{formatCurrency(account.received_principal)}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-slate-600">{formatCurrency(account.received_interest)}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-amber-700 font-medium">{formatCurrency(account.total_pending_amount)}</td>
+                        <td className="px-4 py-3 font-mono text-sm text-red-600 font-medium">{formatCurrency(account.total_pending_interest)}</td>
+                        <td className="px-4 py-3"><StatusBadge status={account.status} /></td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{account.created_by_name || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-500">{formatDate(account.updated_at)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -474,39 +356,17 @@ export default function AccountsPage() {
                     Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} accounts
                   </p>
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setPage(1)}
-                      disabled={page === 1}
-                    >
+                    <Button variant="outline" size="icon" onClick={() => setPage(1)} disabled={page === 1}>
                       <ChevronsLeft className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                    >
+                    <Button variant="outline" size="icon" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <span className="px-4 py-2 text-sm font-medium">
-                      Page {page} of {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
-                    >
+                    <span className="px-4 py-2 text-sm font-medium">Page {page} of {totalPages}</span>
+                    <Button variant="outline" size="icon" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setPage(totalPages)}
-                      disabled={page === totalPages}
-                    >
+                    <Button variant="outline" size="icon" onClick={() => setPage(totalPages)} disabled={page === totalPages}>
                       <ChevronsRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -517,7 +377,6 @@ export default function AccountsPage() {
         </CardContent>
       </Card>
 
-      {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={!!deleteId}
         onClose={() => setDeleteId(null)}

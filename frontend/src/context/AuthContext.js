@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 
 const AuthContext = createContext(null);
@@ -35,6 +35,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Refresh user data to get latest permissions
+  const refreshUser = useCallback(async () => {
+    if (!token) return;
+    try {
+      const response = await api.get('/api/auth/me');
+      setUser(response.data);
+    } catch (error) {
+      // Silently fail - user may have been deactivated
+    }
+  }, [token]);
+
   const login = async (username, password) => {
     const response = await api.post('/api/auth/login', { username, password });
     const { token: newToken, user: userData } = response.data;
@@ -70,6 +81,7 @@ export const AuthProvider = ({ children }) => {
       logout, 
       hasPermission,
       canUnlockClosed,
+      refreshUser,
       isAdmin: user?.is_admin 
     }}>
       {children}

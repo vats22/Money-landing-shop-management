@@ -45,18 +45,29 @@ const ProtectedRoute = () => {
 
 // Dashboard Layout with Sidebar
 const DashboardLayout = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission, isAdmin, refreshUser } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
+  // Refresh user permissions on route change
+  React.useEffect(() => {
+    refreshUser();
+  }, [location.pathname]);
+
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Accounts', href: '/accounts', icon: FileText },
-    { name: 'Reports', href: '/reports', icon: BarChart3 },
+    { name: 'Accounts', href: '/accounts', icon: FileText, requiredPermission: ['accounts', 'view'] },
+    { name: 'Reports', href: '/reports', icon: BarChart3, requiredPermission: ['accounts', 'view'] },
     { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   ];
 
-  const filteredNav = navigation.filter(item => !item.adminOnly || user?.is_admin);
+  const filteredNav = navigation.filter(item => {
+    if (item.adminOnly) return isAdmin;
+    if (item.requiredPermission) {
+      return isAdmin || hasPermission(item.requiredPermission[0], item.requiredPermission[1]);
+    }
+    return true;
+  });
 
   const isActive = (href) => {
     if (href === '/') return location.pathname === '/';

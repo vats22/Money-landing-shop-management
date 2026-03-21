@@ -89,11 +89,12 @@ async def get_account(account_id: str, current_user: dict = Depends(verify_token
     account_data["user_can_add"] = current_user.get("is_admin") or check_permission(current_user, "accounts", "add")
     account_data["user_can_close"] = current_user.get("is_admin") or check_permission(current_user, "accounts", "close")
     account_data["user_can_unlock"] = current_user.get("is_admin") or current_user.get("permissions", {}).get("unlock_closed_account", False)
+    # Closed accounts cannot be edited/deleted - must be reopened first
     if account.get("status") == "closed":
-        if not account_data["user_can_unlock"]:
-            account_data["user_can_edit"] = False
-            account_data["user_can_delete"] = False
-            account_data["user_can_add"] = False
+        account_data["user_can_edit"] = False
+        account_data["user_can_delete"] = False
+        account_data["user_can_add"] = False
+        account_data["user_can_close"] = False
     return account_data
 
 
@@ -151,8 +152,7 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
     if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "update"):
         raise HTTPException(status_code=403, detail="Permission denied: accounts.update")
     if existing.get("status") == "closed":
-        if not current_user.get("is_admin") and not current_user.get("permissions", {}).get("unlock_closed_account"):
-            raise HTTPException(status_code=403, detail="Cannot modify closed account")
+        raise HTTPException(status_code=403, detail="Cannot modify a closed account. Please reopen it first.")
     update_data = {k: v for k, v in account.model_dump().items() if v is not None}
     if "jewellery_items" in update_data:
         jewellery_items = []
@@ -222,6 +222,8 @@ async def delete_account(account_id: str, current_user: dict = Depends(verify_to
         raise HTTPException(status_code=404, detail="Account not found")
     if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "delete"):
         raise HTTPException(status_code=403, detail="Permission denied: accounts.delete")
+    if existing.get("status") == "closed":
+        raise HTTPException(status_code=403, detail="Cannot delete a closed account. Please reopen it first.")
     await accounts_collection.delete_one({"_id": ObjectId(account_id)})
     await ledger_collection.delete_many({"account_id": account_id})
     return {"message": "Account deleted successfully"}
@@ -300,8 +302,7 @@ async def add_landed_entry(account_id: str, entry: LandedEntry, current_user: di
     if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "add"):
         raise HTTPException(status_code=403, detail="Permission denied: accounts.add")
     if account.get("status") == "closed":
-        if not current_user.get("is_admin") and not current_user.get("permissions", {}).get("unlock_closed_account"):
-            raise HTTPException(status_code=403, detail="Cannot add entries to closed account")
+        raise HTTPException(status_code=403, detail="Cannot add entries to a closed account. Please reopen it first.")
     entry_dict = entry.model_dump()
     entry_dict["remaining_principal"] = entry.amount
     entry_dict["interest_start_date"] = entry.date
@@ -328,8 +329,7 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
     if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "add"):
         raise HTTPException(status_code=403, detail="Permission denied: accounts.add")
     if account.get("status") == "closed":
-        if not current_user.get("is_admin") and not current_user.get("permissions", {}).get("unlock_closed_account"):
-            raise HTTPException(status_code=403, detail="Cannot add entries to closed account")
+        raise HTTPException(status_code=403, detail="Cannot add entries to a closed account. Please reopen it first.")
     payment_date = datetime.fromisoformat(entry.date)
     landed_entries = account.get("landed_entries", [])
     landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
