@@ -85,6 +85,12 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - [x] History tab on Account Detail page for close/reopen events
 - [x] Close/reopen event logging with date, user, reason/remarks
 
+### Bug Fixes (Session 3)
+- [x] History tab now shows events in descending order (newest first), close/reopen interleaved chronologically
+- [x] Close Account date auto-set to today (non-editable by user)
+- [x] Min date validation on landed/received entries = account opening date (frontend + backend)
+- [x] Max date validation on entries = current date (frontend + backend)
+
 ## Prioritized Backlog
 
 ### P2 (Medium Priority) - Next
