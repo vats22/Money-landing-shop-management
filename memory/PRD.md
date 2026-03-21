@@ -9,31 +9,13 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - Ledger-based financial tracking
 - Role-based user permissions
 
-## User Personas
-1. **Master Admin** - Full system access, manages users and permissions
-2. **Regular Users** - Access based on assigned permissions (operator, viewer)
-
 ## Technology Stack
-- **Frontend**: React 18, Tailwind CSS, React Router, Recharts
+- **Frontend**: React 18, Tailwind CSS, React Router, Recharts, react-day-picker
 - **Backend**: Python FastAPI (modular structure with APIRouter)
 - **Database**: MongoDB (Motor async driver)
 - **Auth**: JWT Authentication with bcrypt password hashing
 
-## Core Requirements
-- [x] Login with username/mobile + password (no signup)
-- [x] Dashboard with 4 summary cards + stats
-- [x] Accounts management with full CRUD
-- [x] Jewellery items tracking per account
-- [x] Landed entries (money lent) with interest rates
-- [x] Received entries (payments) with automatic distribution
-- [x] Ledger system for audit trail (chronological)
-- [x] User management (Admin only)
-- [x] Permission system per module
-- [x] Close/Reopen account lifecycle
-- [x] Reports & Analytics Dashboard
-- [x] Export to PDF/Excel
-
-## Architecture (Post-Refactoring)
+## Architecture
 ```
 /app/backend/
   server.py          - Main app, CORS, startup, router registration
@@ -46,43 +28,55 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
   routes/
     auth_routes.py   - Login, /me endpoints
     users.py         - User CRUD, permissions, status toggle
-    dashboard.py     - Summary, stats
-    accounts.py      - Account CRUD, close/reopen, landed/received, ledger, villages
+    dashboard.py     - Summary (active + closed), stats
+    accounts.py      - Account CRUD, close/reopen, landed/received, ledger
     reports.py       - Village summary, monthly trend, rate distribution, top borrowers
     export.py        - Excel and PDF exports
   scripts/
     seed.py          - Data seeding script
 ```
 
-## Key Business Logic
-1. **Interest Formula**: Interest = (Principal x Rate x Days) / (100 x 30)
-2. **Payment Distribution**: Interest paid first, remainder to principal (FIFO oldest first)
-3. **Payment Date Rule**: Payment only affects landed entries that existed on or before the payment date
-4. **Carry-Forward**: If payment < interest, remaining interest is carried forward proportionally
-5. **Ledger**: All entries generated in chronological order for correct running balance
-
 ## Default Credentials
 - **Admin**: admin / admin123
 - **Operator**: operator1 / operator123
 - **Viewer**: viewer1 / viewer123
 
+## Implemented Features
+
+### Core
+- [x] JWT Authentication (no public signup)
+- [x] User Management with role-based permissions
+- [x] Account CRUD with jewellery, landed, received entries
+- [x] Interest calculation (monthly rate, carry-forward, FIFO principal)
+- [x] Payment distribution (interest-first, then FIFO principal)
+- [x] Financial Ledger with chronological audit trail
+- [x] Close/Reopen account lifecycle
+
+### Reports & Export
+- [x] Reports Dashboard (4 charts + tables)
+- [x] Export All Accounts to Excel
+- [x] Export Individual Account to Excel (5 sheets)
+- [x] Export Individual Account to PDF
+
+### UI Components
+- [x] DateRangePicker (dual-month calendar with presets: 7d, 30d, 90d, 1y)
+- [x] SearchableDropdown (village filter with search inside dropdown)
+- [x] Permission-based sidebar navigation
+- [x] Permission-based button visibility (Add/Edit/Delete)
+
+### Bug Fixes (Session 2)
+- [x] Payment only affects landed entries that existed at/before payment date
+- [x] Chronological ledger generation with correct running balance
+- [x] Permissions update reflects immediately (matched_count fix + refreshUser)
+- [x] Add/Edit/Delete buttons hidden for users without permissions
+- [x] Sidebar items filtered by user permissions
+- [x] Village dropdown with search functionality (not text input)
+- [x] Closed accounts cannot be edited/deleted (must reopen first)
+- [x] Dashboard separates active vs closed account totals
+
 ## Prioritized Backlog
 
-### P0 (Critical) - DONE
-- [x] Authentication system
-- [x] Core account management
-- [x] Interest calculation engine
-- [x] Ledger system
-- [x] Payment date bug fix (future landed entries not affected)
-- [x] Chronological ledger generation
-
-### P1 (High Priority) - DONE
-- [x] Reports and analytics dashboard (4 charts + tables)
-- [x] Export to PDF/Excel (accounts list + individual account)
-- [x] Backend refactoring (modular structure)
-- [x] Data seeding script
-
-### P2 (Medium Priority) - Future
+### P2 (Medium Priority) - Next
 - [ ] Interest history tracking
 - [ ] Account renewal workflow
 - [ ] Bulk import/export
