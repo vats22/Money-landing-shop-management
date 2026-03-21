@@ -8,7 +8,7 @@ import sys
 from datetime import datetime, date
 
 class MultipleEntriesTester:
-    def __init__(self, base_url: str = "https://71b2ff06-e750-4d79-b6ec-a0f83b706389.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://pawn-mgmt.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.token = None
         self.test_account_id = None
