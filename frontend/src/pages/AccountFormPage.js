@@ -44,7 +44,12 @@ export default function AccountFormPage() {
   const [currentImageIdx, setCurrentImageIdx] = useState(0);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
+
+  // Camera state
+  const [showCamera, setShowCamera] = useState(false);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
 
   useEffect(() => {
     if (isEdit) {
@@ -170,6 +175,34 @@ export default function AccountFormPage() {
     return `${process.env.REACT_APP_BACKEND_URL}/api/files/${image.storage_path}?auth=${token}`;
   };
 
+  const uploadFileToServer = async (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      await api.post(`/api/accounts/${id}/jewellery/${selectedItemIndex}/images`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return true;
+    } catch (error) {
+      toast.error(`Failed to upload ${file.name || 'image'}`);
+      return false;
+    }
+  };
+
+  const refreshImagesAfterUpload = async () => {
+    const refreshed = await api.get(`/api/accounts/${id}`);
+    const updatedItems = refreshed.data.jewellery_items || [];
+    setFormData(prev => ({
+      ...prev,
+      jewellery_items: prev.jewellery_items.map((item, i) => ({
+        ...item,
+        images: updatedItems[i]?.images || item.images || []
+      }))
+    }));
+    const updatedItem = updatedItems[selectedItemIndex];
+    setSelectedItemImages(updatedItem?.images || []);
+  };
+
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -183,31 +216,12 @@ export default function AccountFormPage() {
 
     for (const file of filesToUpload) {
       if (file.size > 10 * 1024 * 1024) { toast.error(`${file.name}: Too large (max 10MB)`); continue; }
-      const fd = new FormData();
-      fd.append('file', file);
-      try {
-        await api.post(`/api/accounts/${id}/jewellery/${selectedItemIndex}/images`, fd, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      } catch (error) {
-        toast.error(`Failed to upload ${file.name}`);
-      }
+      await uploadFileToServer(file);
     }
 
     setUploading(false);
     toast.success('Images uploaded');
-    // Refresh account data to get updated images
-    const refreshed = await api.get(`/api/accounts/${id}`);
-    const updatedItems = refreshed.data.jewellery_items || [];
-    setFormData(prev => ({
-      ...prev,
-      jewellery_items: prev.jewellery_items.map((item, i) => ({
-        ...item,
-        images: updatedItems[i]?.images || item.images || []
-      }))
-    }));
-    const updatedItem = updatedItems[selectedItemIndex];
-    setSelectedItemImages(updatedItem?.images || []);
+    await refreshImagesAfterUpload();
     if (e.target) e.target.value = '';
   };
 
@@ -228,6 +242,56 @@ export default function AccountFormPage() {
       setSelectedItemImages(newImages);
       if (currentImageIdx >= newImages.length) setCurrentImageIdx(Math.max(0, newImages.length - 1));
     } catch { toast.error('Failed to delete image'); }
+  };
+
+  // Camera functions
+  const openCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      streamRef.current = stream;
+      setShowCamera(true);
+      // Wait for DOM to render, then attach stream
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      }, 100);
+    } catch (err) {
+      toast.error('Unable to access camera. Please check permissions or use "Choose from Device" instead.');
+    }
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      setUploading(true);
+      closeCamera();
+      const success = await uploadFileToServer(file);
+      setUploading(false);
+      if (success) {
+        toast.success('Photo captured and uploaded');
+        await refreshImagesAfterUpload();
+      }
+    }, 'image/jpeg', 0.85);
+  };
+
+  const closeCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setShowCamera(false);
   };
 
   const validateForm = () => {
@@ -678,15 +742,15 @@ export default function AccountFormPage() {
 
       {/* Image Viewer/Upload Modal */}
       {isEdit && (
-        <Modal isOpen={showImageModal} onClose={() => setShowImageModal(false)} title={`Images - ${selectedItemName}`} size="lg">
+        <Modal isOpen={showImageModal} onClose={() => { setShowImageModal(false); closeCamera(); }} title={`Images - ${selectedItemName}`} size="lg">
           <div className="space-y-4">
-            {selectedItemImages.length === 0 ? (
+            {selectedItemImages.length === 0 && !showCamera ? (
               <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                 <ImageIcon className="h-12 w-12 mb-3" />
                 <p className="text-sm font-medium">No images uploaded yet</p>
                 <p className="text-xs mt-1">Upload up to {MAX_IMAGES} images per jewellery item</p>
               </div>
-            ) : (
+            ) : !showCamera && (
               <div>
                 {/* Main image display */}
                 <div className="relative bg-slate-100 rounded-xl overflow-hidden" style={{ minHeight: '350px' }}>
@@ -741,15 +805,52 @@ export default function AccountFormPage() {
               </div>
             )}
 
+            {/* Camera View */}
+            {showCamera && (
+              <div className="space-y-3">
+                <div className="relative bg-black rounded-xl overflow-hidden" style={{ minHeight: '350px' }}>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-[350px] object-contain"
+                    data-testid="camera-preview"
+                  />
+                </div>
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="flex justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={closeCamera}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-sm font-medium transition-colors"
+                    data-testid="cancel-camera-btn"
+                  >
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={capturePhoto}
+                    disabled={uploading}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                    data-testid="capture-photo-btn"
+                  >
+                    <Camera className="h-4 w-4" />
+                    {uploading ? 'Uploading...' : 'Capture Photo'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Upload Section */}
-            {selectedItemImages.length < MAX_IMAGES && (
+            {!showCamera && selectedItemImages.length < MAX_IMAGES && (
               <div className="border-t border-slate-200 pt-4">
                 <p className="text-xs text-slate-500 mb-3">
                   {MAX_IMAGES - selectedItemImages.length} more image(s) can be added
                 </p>
                 <div className="flex gap-2">
                   <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-                  <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageUpload} className="hidden" />
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -762,13 +863,13 @@ export default function AccountFormPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => cameraInputRef.current?.click()}
+                    onClick={openCamera}
                     disabled={uploading}
-                    data-testid="form-upload-camera-btn"
+                    data-testid="form-open-camera-btn"
                     className="flex items-center gap-2 px-4 py-2.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
                   >
                     <Camera className="h-4 w-4" />
-                    Camera
+                    Open Camera
                   </button>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { formatCurrency, formatDate, formatWeight } from '../lib/utils';
@@ -12,8 +12,8 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, Pencil, Gem, Wallet, TrendingUp, TrendingDown,
   Calendar, MapPin, User, FileText, BookOpen, Lock, Unlock,
-  AlertCircle, Download, FileSpreadsheet, Camera, Image as ImageIcon,
-  X, ChevronLeft, ChevronRight, Clock, Upload
+  AlertCircle, Download, FileSpreadsheet, Image as ImageIcon,
+  X, ChevronLeft, ChevronRight, Clock
 } from 'lucide-react';
 
 const getToday = () => new Date().toISOString().split('T')[0];
@@ -40,9 +40,6 @@ export default function AccountDetailPage() {
   const [selectedItemName, setSelectedItemName] = useState('');
   const [selectedItemIndex, setSelectedItemIndex] = useState(-1);
   const [currentImageIdx, setCurrentImageIdx] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
 
   useEffect(() => { fetchAccountData(); }, [id]);
 
@@ -112,55 +109,6 @@ export default function AccountDetailPage() {
     setSelectedItemIndex(index);
     setCurrentImageIdx(0);
     setShowImageModal(true);
-  };
-
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    
-    const currentImages = account.jewellery_items[selectedItemIndex]?.images || [];
-    const remaining = MAX_IMAGES - currentImages.length;
-    if (remaining <= 0) { toast.error('Maximum 5 images per item'); return; }
-    
-    const filesToUpload = files.slice(0, remaining);
-    setUploading(true);
-    
-    for (const file of filesToUpload) {
-      if (file.size > 10 * 1024 * 1024) { toast.error(`${file.name}: Too large (max 10MB)`); continue; }
-      const formData = new FormData();
-      formData.append('file', file);
-      try {
-        await api.post(`/api/accounts/${id}/jewellery/${selectedItemIndex}/images`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      } catch (error) {
-        toast.error(`Failed to upload ${file.name}`);
-      }
-    }
-    
-    setUploading(false);
-    toast.success('Images uploaded');
-    await fetchAccountData();
-    // Refresh modal data
-    const refreshed = await api.get(`/api/accounts/${id}`);
-    const updatedItem = refreshed.data.jewellery_items[selectedItemIndex];
-    setSelectedItemImages(updatedItem?.images || []);
-    setAccount(refreshed.data);
-    if (e.target) e.target.value = '';
-  };
-
-  const handleDeleteImage = async (imageId) => {
-    try {
-      await api.delete(`/api/accounts/${id}/jewellery/${selectedItemIndex}/images/${imageId}`);
-      toast.success('Image deleted');
-      await fetchAccountData();
-      const refreshed = await api.get(`/api/accounts/${id}`);
-      const updatedItem = refreshed.data.jewellery_items[selectedItemIndex];
-      const newImages = updatedItem?.images || [];
-      setSelectedItemImages(newImages);
-      setAccount(refreshed.data);
-      if (currentImageIdx >= newImages.length) setCurrentImageIdx(Math.max(0, newImages.length - 1));
-    } catch { toast.error('Failed to delete image'); }
   };
 
   const getImageUrl = (image) => {
@@ -601,14 +549,14 @@ export default function AccountDetailPage() {
         </div>
       </Modal>
 
-      {/* Image Viewer Modal */}
+      {/* Image Viewer Modal (View Only) */}
       <Modal isOpen={showImageModal} onClose={() => setShowImageModal(false)} title={`Images - ${selectedItemName}`} size="lg">
         <div className="space-y-4">
           {selectedItemImages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-slate-400">
               <ImageIcon className="h-12 w-12 mb-3" />
               <p className="text-sm font-medium">No images uploaded yet</p>
-              <p className="text-xs mt-1">Upload up to {MAX_IMAGES} images per jewellery item</p>
+              <p className="text-xs mt-1">Use the Edit form to upload images for this jewellery item</p>
             </div>
           ) : (
             <div>
@@ -639,15 +587,6 @@ export default function AccountDetailPage() {
                 <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-black/60 rounded-full text-white text-xs font-medium">
                   {currentImageIdx + 1} / {selectedItemImages.length}
                 </div>
-                {account.user_can_edit && (
-                  <button
-                    onClick={() => handleDeleteImage(selectedItemImages[currentImageIdx].id)}
-                    className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-600 rounded-full text-white transition-colors"
-                    title="Delete image"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
               </div>
               {/* Thumbnails */}
               <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
@@ -660,37 +599,6 @@ export default function AccountDetailPage() {
                     <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {/* Upload Section */}
-          {(account.user_can_edit || account.user_can_add) && selectedItemImages.length < MAX_IMAGES && (
-            <div className="border-t border-slate-200 pt-4">
-              <p className="text-xs text-slate-500 mb-3">
-                {MAX_IMAGES - selectedItemImages.length} more image(s) can be added
-              </p>
-              <div className="flex gap-2">
-                <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
-                <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageUpload} className="hidden" />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  data-testid="upload-from-device-btn"
-                  className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  <Upload className="h-4 w-4" />
-                  {uploading ? 'Uploading...' : 'Choose from Device'}
-                </button>
-                <button
-                  onClick={() => cameraInputRef.current?.click()}
-                  disabled={uploading}
-                  data-testid="upload-from-camera-btn"
-                  className="flex items-center gap-2 px-4 py-2.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  <Camera className="h-4 w-4" />
-                  Camera
-                </button>
               </div>
             </div>
           )}
