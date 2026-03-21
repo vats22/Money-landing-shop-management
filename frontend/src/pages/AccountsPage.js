@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 import { formatCurrency, formatDate, formatWeight } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -28,18 +29,30 @@ import {
   Download
 } from 'lucide-react';
 
+// Get date 30 days ago
+const getDefaultStartDate = () => {
+  const date = new Date();
+  date.setDate(date.getDate() - 30);
+  return date.toISOString().split('T')[0];
+};
+
+// Get today's date
+const getToday = () => new Date().toISOString().split('T')[0];
+
 export default function AccountsPage() {
   const navigate = useNavigate();
+  const { user, hasPermission, isAdmin } = useAuth();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [villages, setVillages] = useState([]);
+  const [villageSearch, setVillageSearch] = useState('');
   
-  // Filters
+  // Filters - default to past 30 days
   const [search, setSearch] = useState('');
   const [villageFilter, setVillageFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(getDefaultStartDate());
+  const [endDate, setEndDate] = useState(getToday());
   
   // Pagination
   const [page, setPage] = useState(1);
@@ -53,6 +66,19 @@ export default function AccountsPage() {
   
   // Delete dialog
   const [deleteId, setDeleteId] = useState(null);
+
+  // Check permissions
+  const canAdd = isAdmin || hasPermission('accounts', 'add');
+  const canEdit = isAdmin || hasPermission('accounts', 'update');
+  const canDelete = isAdmin || hasPermission('accounts', 'delete');
+
+  // Filter villages based on search
+  const filteredVillages = useMemo(() => {
+    if (!villageSearch) return villages;
+    return villages.filter(v => 
+      v.toLowerCase().includes(villageSearch.toLowerCase())
+    );
+  }, [villages, villageSearch]);
 
   useEffect(() => {
     fetchAccounts();
@@ -124,9 +150,10 @@ export default function AccountsPage() {
   const clearFilters = () => {
     setSearch('');
     setVillageFilter('');
+    setVillageSearch('');
     setStatusFilter('');
-    setStartDate('');
-    setEndDate('');
+    setStartDate(getDefaultStartDate());
+    setEndDate(getToday());
     setPage(1);
     fetchAccounts();
   };
@@ -164,12 +191,14 @@ export default function AccountsPage() {
           <h1 className="text-3xl font-bold font-display text-slate-900">Accounts</h1>
           <p className="text-slate-500 mt-1">Manage lending accounts</p>
         </div>
-        <Link to="/accounts/new">
-          <Button data-testid="add-account-btn">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Account
-          </Button>
-        </Link>
+        {canAdd && (
+          <Link to="/accounts/new">
+            <Button data-testid="add-account-btn">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Account
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Filters */}
@@ -197,16 +226,48 @@ export default function AccountsPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
-            <Select
-              data-testid="village-filter"
-              value={villageFilter}
-              onChange={(e) => setVillageFilter(e.target.value)}
-            >
-              <option value="">All Villages</option>
-              {villages.map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </Select>
+            {/* Village dropdown with search */}
+            <div className="relative">
+              <Input
+                data-testid="village-search"
+                placeholder="Search village..."
+                value={villageSearch}
+                onChange={(e) => {
+                  setVillageSearch(e.target.value);
+                  if (!e.target.value) setVillageFilter('');
+                }}
+                className="mb-1"
+              />
+              {villageSearch && filteredVillages.length > 0 && (
+                <div className="absolute z-20 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-auto">
+                  {filteredVillages.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => {
+                        setVillageFilter(v);
+                        setVillageSearch(v);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-slate-100"
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {villageFilter && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVillageFilter('');
+                    setVillageSearch('');
+                  }}
+                  className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
             <Select
               data-testid="status-filter"
               value={statusFilter}
@@ -218,18 +279,24 @@ export default function AccountsPage() {
               <option value="renewed">Renewed</option>
               <option value="immediate action needed">Immediate Action</option>
             </Select>
-            <Input
-              type="date"
-              placeholder="Start Date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-            <Input
-              type="date"
-              placeholder="End Date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Start Date</label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                max={getToday()}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">End Date</label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                max={getToday()}
+              />
+            </div>
           </div>
           <div className="mt-4 flex justify-end">
             <Button onClick={handleSearch} data-testid="apply-filters-btn">
@@ -303,22 +370,26 @@ export default function AccountsPage() {
                             >
                               <Eye className="h-4 w-4 text-blue-600" />
                             </button>
-                            <button
-                              data-testid={`edit-account-${account.id}`}
-                              onClick={() => navigate(`/accounts/${account.id}/edit`)}
-                              className="p-2 hover:bg-amber-100 rounded-lg transition-colors"
-                              title="Edit"
-                            >
-                              <Pencil className="h-4 w-4 text-amber-600" />
-                            </button>
-                            <button
-                              data-testid={`delete-account-${account.id}`}
-                              onClick={() => setDeleteId(account.id)}
-                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </button>
+                            {canEdit && account.status !== 'closed' && (
+                              <button
+                                data-testid={`edit-account-${account.id}`}
+                                onClick={() => navigate(`/accounts/${account.id}/edit`)}
+                                className="p-2 hover:bg-amber-100 rounded-lg transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil className="h-4 w-4 text-amber-600" />
+                              </button>
+                            )}
+                            {canDelete && account.status !== 'closed' && (
+                              <button
+                                data-testid={`delete-account-${account.id}`}
+                                onClick={() => setDeleteId(account.id)}
+                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </button>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3 font-mono text-sm font-medium text-emerald-700">

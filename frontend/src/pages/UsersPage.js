@@ -461,8 +461,8 @@ export default function UsersPage() {
           {/* Accounts Module */}
           <div>
             <h4 className="font-medium text-slate-900 mb-3">Accounts Module</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {['view', 'add', 'update', 'delete'].map((perm) => (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {['view', 'add', 'update', 'delete', 'close'].map((perm) => (
                 <label key={perm} className="flex items-center gap-2">
                   <input
                     type="checkbox"

@@ -3,9 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { formatCurrency, formatDate, formatWeight } from '../lib/utils';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { StatusBadge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
+import { Modal, ConfirmDialog } from '../components/ui/Modal';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -18,8 +20,13 @@ import {
   MapPin,
   User,
   FileText,
-  BookOpen
+  BookOpen,
+  Lock,
+  Unlock,
+  AlertCircle
 } from 'lucide-react';
+
+const getToday = () => new Date().toISOString().split('T')[0];
 
 export default function AccountDetailPage() {
   const { id } = useParams();
@@ -28,6 +35,14 @@ export default function AccountDetailPage() {
   const [ledger, setLedger] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // Close/Reopen modals
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showReopenModal, setShowReopenModal] = useState(false);
+  const [closeDate, setCloseDate] = useState(getToday());
+  const [closeRemarks, setCloseRemarks] = useState('');
+  const [reopenReason, setReopenReason] = useState('');
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     fetchAccountData();
@@ -49,6 +64,48 @@ export default function AccountDetailPage() {
     }
   };
 
+  const handleCloseAccount = async () => {
+    if (!closeDate) {
+      toast.error('Please select a close date');
+      return;
+    }
+    setProcessing(true);
+    try {
+      await api.post(`/api/accounts/${id}/close`, {
+        close_date: closeDate,
+        remarks: closeRemarks
+      });
+      toast.success('Account closed successfully');
+      setShowCloseModal(false);
+      fetchAccountData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to close account');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleReopenAccount = async () => {
+    if (!reopenReason.trim()) {
+      toast.error('Reason for reopening is mandatory');
+      return;
+    }
+    setProcessing(true);
+    try {
+      await api.post(`/api/accounts/${id}/reopen`, {
+        reason: reopenReason
+      });
+      toast.success('Account reopened successfully');
+      setShowReopenModal(false);
+      setReopenReason('');
+      fetchAccountData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to reopen account');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -67,8 +124,35 @@ export default function AccountDetailPage() {
     { id: 'ledger', label: 'Ledger', icon: BookOpen },
   ];
 
+  const isClosed = account.status === 'closed';
+
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Closed Account Banner */}
+      {isClosed && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="font-medium text-amber-800">Account Closed</p>
+            <p className="text-sm text-amber-600">
+              Closed on {formatDate(account.closed_at)} by {account.closed_by_name}
+              {account.close_remarks && ` - ${account.close_remarks}`}
+            </p>
+          </div>
+          {account.user_can_unlock && (
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              onClick={() => setShowReopenModal(true)}
+              data-testid="reopen-account-btn"
+            >
+              <Unlock className="h-4 w-4 mr-2" />
+              Reopen Account
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -88,12 +172,28 @@ export default function AccountDetailPage() {
             <p className="text-slate-500 mt-1 font-mono">{account.account_number}</p>
           </div>
         </div>
-        <Link to={`/accounts/${id}/edit`}>
-          <Button data-testid="edit-account-btn">
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit Account
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* Close Account Button - only if not closed and user has permission */}
+          {!isClosed && account.user_can_close && (
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCloseModal(true)}
+              data-testid="close-account-btn"
+            >
+              <Lock className="h-4 w-4 mr-2" />
+              Close Account
+            </Button>
+          )}
+          {/* Edit Button - only if not closed or user can unlock */}
+          {account.user_can_edit && (
+            <Link to={`/accounts/${id}/edit`}>
+              <Button data-testid="edit-account-btn">
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit Account
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -463,7 +563,10 @@ export default function AccountDetailPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {ledger.map((entry, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
+                        <tr key={idx} className={`hover:bg-slate-50 ${
+                          entry.transaction_type === 'CLOSED' ? 'bg-red-50' :
+                          entry.transaction_type === 'REOPENED' ? 'bg-green-50' : ''
+                        }`}>
                           <td className="px-4 py-3 text-sm text-slate-500">{idx + 1}</td>
                           <td className="px-4 py-3 text-sm text-slate-600">
                             {formatDate(entry.transaction_date)}
@@ -474,13 +577,19 @@ export default function AccountDetailPage() {
                                 ? 'bg-emerald-100 text-emerald-700'
                                 : entry.transaction_type === 'PAYMENT'
                                 ? 'bg-blue-100 text-blue-700'
+                                : entry.transaction_type === 'CLOSED'
+                                ? 'bg-red-100 text-red-700'
+                                : entry.transaction_type === 'REOPENED'
+                                ? 'bg-green-100 text-green-700'
                                 : 'bg-amber-100 text-amber-700'
                             }`}>
                               {entry.transaction_type}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-sm font-mono text-right">
-                            {formatCurrency(entry.amount)}
+                            {entry.transaction_type === 'CLOSED' || entry.transaction_type === 'REOPENED' 
+                              ? '-' 
+                              : formatCurrency(entry.amount)}
                           </td>
                           <td className="px-4 py-3 text-sm font-mono text-right text-amber-600">
                             {formatCurrency(entry.interest_amount)}
@@ -489,7 +598,7 @@ export default function AccountDetailPage() {
                             {formatCurrency(entry.principal_amount)}
                           </td>
                           <td className="px-4 py-3 text-sm font-mono text-right text-red-600">
-                            {formatCurrency(entry.remaining_interest || 0)}
+                            {entry.transaction_type === 'CLOSED' ? '₹0.00' : formatCurrency(entry.remaining_interest || 0)}
                           </td>
                           <td className="px-4 py-3 text-sm font-mono text-right font-medium">
                             {formatCurrency(entry.remaining_principal || entry.balance_amount)}
@@ -506,6 +615,105 @@ export default function AccountDetailPage() {
           </Card>
         )}
       </div>
+
+      {/* Close Account Modal */}
+      <Modal
+        isOpen={showCloseModal}
+        onClose={() => setShowCloseModal(false)}
+        title="Close Account"
+        size="default"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-amber-50 rounded-lg">
+            <p className="text-sm text-amber-800">
+              Closing this account will prevent any further modifications. 
+              Only users with special permissions can reopen it.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Close Date *
+            </label>
+            <Input
+              type="date"
+              value={closeDate}
+              onChange={(e) => setCloseDate(e.target.value)}
+              max={getToday()}
+              data-testid="close-date-input"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Remarks (Optional)
+            </label>
+            <textarea
+              value={closeRemarks}
+              onChange={(e) => setCloseRemarks(e.target.value)}
+              rows={3}
+              className="flex w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              placeholder="Any remarks about account closure..."
+              data-testid="close-remarks-input"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="outline" onClick={() => setShowCloseModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleCloseAccount}
+              disabled={processing}
+              data-testid="confirm-close-btn"
+            >
+              {processing ? <Spinner size="sm" className="text-white" /> : <Lock className="h-4 w-4 mr-2" />}
+              Close Account
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reopen Account Modal */}
+      <Modal
+        isOpen={showReopenModal}
+        onClose={() => setShowReopenModal(false)}
+        title="Reopen Account"
+        size="default"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 rounded-lg">
+            <p className="text-sm text-blue-800">
+              You are about to reopen this closed account. Please provide a reason for reopening.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Reason for Reopening *
+            </label>
+            <textarea
+              value={reopenReason}
+              onChange={(e) => setReopenReason(e.target.value)}
+              rows={3}
+              className="flex w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              placeholder="Please provide a reason for reopening this account..."
+              required
+              data-testid="reopen-reason-input"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="outline" onClick={() => setShowReopenModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleReopenAccount}
+              disabled={processing || !reopenReason.trim()}
+              data-testid="confirm-reopen-btn"
+            >
+              {processing ? <Spinner size="sm" className="text-white" /> : <Unlock className="h-4 w-4 mr-2" />}
+              Reopen Account
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

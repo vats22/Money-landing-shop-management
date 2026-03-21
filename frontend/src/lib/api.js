@@ -22,6 +22,12 @@ api.interceptors.response.use(
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
+    // Handle inactive user
+    if (error.response?.status === 403 && error.response?.data?.detail?.includes('inactive')) {
+      localStorage.removeItem('token');
+      alert('Your account has been deactivated. Please contact administrator.');
+      window.location.href = '/login';
+    }
     return Promise.reject(error);
   }
 );

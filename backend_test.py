@@ -1,697 +1,545 @@
-#!/usr/bin/env python3
-"""
-LendLedger Backend API Testing Suite
-Tests all endpoints for the Jewellery & Money Lending Management System
-"""
 import requests
-import json
 import sys
-from datetime import datetime, date
-from typing import Optional, Dict, Any
+from datetime import datetime, timedelta
+import json
 
-class LendLedgerAPITester:
-    def __init__(self, base_url: str = "https://loan-ledger-16.preview.emergentagent.com"):
-        self.base_url = base_url.rstrip('/')
-        self.token = None
+class JewelleryLendingSystemTester:
+    def __init__(self, base_url="https://loan-ledger-16.preview.emergentagent.com"):
+        self.base_url = base_url
+        self.admin_token = None
+        self.user_token = None
+        self.test_user_id = None
+        self.test_account_id = None
         self.tests_run = 0
         self.tests_passed = 0
-        self.test_results = []
-        
-        # Test data storage
-        self.created_account_id = None
-        self.created_user_id = None
-        self.specific_test_accounts = []
 
-    def log_test(self, name: str, success: bool, details: str = "", response_data: Any = None):
-        """Log test result"""
-        self.tests_run += 1
-        if success:
-            self.tests_passed += 1
-            print(f"✅ {name}: PASSED")
-        else:
-            print(f"❌ {name}: FAILED - {details}")
-        
-        self.test_results.append({
-            "test": name,
-            "status": "PASSED" if success else "FAILED",
-            "details": details,
-            "response_data": response_data
-        })
-
-    def make_request(self, method: str, endpoint: str, data: Dict = None, expected_status: int = 200) -> tuple:
-        """Make API request and return success, response data"""
-        url = f"{self.base_url}/api/{endpoint.lstrip('/')}"
+    def run_test(self, name, method, endpoint, expected_status, data=None, token=None):
+        """Run a single API test"""
+        url = f"{self.base_url}/{endpoint}"
         headers = {'Content-Type': 'application/json'}
-        
-        if self.token:
-            headers['Authorization'] = f'Bearer {self.token}'
+        if token:
+            headers['Authorization'] = f'Bearer {token}'
+
+        self.tests_run += 1
+        print(f"\n🔍 Testing {name}...")
         
         try:
             if method == 'GET':
-                response = requests.get(url, headers=headers, timeout=30)
+                response = requests.get(url, headers=headers)
             elif method == 'POST':
-                response = requests.post(url, json=data, headers=headers, timeout=30)
+                response = requests.post(url, json=data, headers=headers)
             elif method == 'PUT':
-                response = requests.put(url, json=data, headers=headers, timeout=30)
+                response = requests.put(url, json=data, headers=headers)
             elif method == 'DELETE':
-                response = requests.delete(url, headers=headers, timeout=30)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-            
+                response = requests.delete(url, headers=headers)
+
             success = response.status_code == expected_status
-            
-            try:
-                response_data = response.json()
-            except:
-                response_data = {"status_code": response.status_code, "text": response.text}
-            
-            return success, response_data, response.status_code
-            
-        except requests.exceptions.RequestException as e:
-            return False, {"error": str(e)}, 0
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                try:
+                    return success, response.json() if response.content else {}
+                except:
+                    return success, {}
+            else:
+                print(f"❌ Failed - Expected {expected_status}, got {response.status_code}")
+                if response.content:
+                    try:
+                        error_data = response.json()
+                        print(f"   Error: {error_data.get('detail', 'Unknown error')}")
+                    except:
+                        print(f"   Response: {response.text[:200]}")
+                return False, {}
+
         except Exception as e:
-            return False, {"error": str(e)}, 0
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, {}
 
-    def test_health_check(self):
-        """Test health endpoint"""
-        success, data, status = self.make_request('GET', '/health')
-        self.log_test("Health Check", success, 
-                     f"Status: {status}" if not success else "", data)
-        return success
-
-    def test_admin_login(self, username: str = "admin", password: str = "admin123"):
+    def test_admin_login(self):
         """Test admin login"""
-        login_data = {"username": username, "password": password}
-        success, data, status = self.make_request('POST', '/auth/login', login_data)
-        
-        if success and 'token' in data:
-            self.token = data['token']
-            self.log_test("Admin Login", True, "", {"user": data.get('user', {}).get('username')})
-        else:
-            self.log_test("Admin Login", False, f"Status: {status}, Data: {data}")
-        
-        return success
+        success, response = self.run_test(
+            "Admin Login",
+            "POST",
+            "api/auth/login",
+            200,
+            data={"username": "admin", "password": "admin123"}
+        )
+        if success and 'token' in response:
+            self.admin_token = response['token']
+            print(f"   Admin token obtained")
+            return True
+        return False
 
-    def test_get_current_user(self):
-        """Test getting current user info"""
-        success, data, status = self.make_request('GET', '/auth/me')
-        self.log_test("Get Current User", success, 
-                     f"Status: {status}" if not success else "", 
-                     {"username": data.get('username')} if success else data)
-        return success
-
-    def test_dashboard_summary(self):
-        """Test dashboard summary endpoint"""
-        success, data, status = self.make_request('GET', '/dashboard/summary')
-        
-        if success:
-            required_fields = ['total_landed_amount', 'total_received_amount', 
-                             'total_pending_amount', 'total_pending_interest']
-            has_all_fields = all(field in data for field in required_fields)
-            if has_all_fields:
-                self.log_test("Dashboard Summary", True, "", 
-                            {k: data.get(k) for k in required_fields})
-            else:
-                missing_fields = [f for f in required_fields if f not in data]
-                self.log_test("Dashboard Summary", False, 
-                            f"Missing fields: {missing_fields}", data)
-        else:
-            self.log_test("Dashboard Summary", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_dashboard_stats(self):
-        """Test dashboard stats endpoint"""
-        success, data, status = self.make_request('GET', '/dashboard/stats')
-        
-        if success:
-            required_fields = ['total_accounts', 'active_accounts', 'closed_accounts']
-            has_all_fields = all(field in data for field in required_fields)
-            if has_all_fields:
-                self.log_test("Dashboard Stats", True, "", 
-                            {k: data.get(k) for k in required_fields})
-            else:
-                missing_fields = [f for f in required_fields if f not in data]
-                self.log_test("Dashboard Stats", False, 
-                            f"Missing fields: {missing_fields}", data)
-        else:
-            self.log_test("Dashboard Stats", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_create_account(self):
-        """Test creating a new account"""
-        account_data = {
-            "opening_date": date.today().isoformat(),
-            "name": "Test Customer",
-            "village": "Test Village",
-            "status": "continue",
-            "details": "Test account for API testing",
-            "jewellery_items": [
-                {"name": "Gold Ring", "weight": 10.5},
-                {"name": "Gold Necklace", "weight": 25.0}
-            ],
-            "landed_entries": [
-                {
-                    "date": date.today().isoformat(),
-                    "amount": 50000.0,
-                    "interest_rate": 2.0
-                }
-            ],
-            "received_entries": []
-        }
-        
-        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
-        
-        if success and 'id' in data:
-            self.created_account_id = data['id']
-            self.log_test("Create Account", True, "", 
-                        {"id": data['id'], "account_number": data.get('account_number')})
-        else:
-            self.log_test("Create Account", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_get_accounts_list(self):
-        """Test getting accounts list"""
-        success, data, status = self.make_request('GET', '/accounts')
-        
-        if success:
-            required_fields = ['accounts', 'total', 'page', 'limit', 'total_pages']
-            has_all_fields = all(field in data for field in required_fields)
-            if has_all_fields:
-                self.log_test("Get Accounts List", True, "", 
-                            {"total": data.get('total'), "page": data.get('page')})
-            else:
-                missing_fields = [f for f in required_fields if f not in data]
-                self.log_test("Get Accounts List", False, 
-                            f"Missing fields: {missing_fields}", data)
-        else:
-            self.log_test("Get Accounts List", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_get_account_detail(self):
-        """Test getting account details"""
-        if not self.created_account_id:
-            self.log_test("Get Account Detail", False, "No account ID available")
-            return False
-        
-        success, data, status = self.make_request('GET', f'/accounts/{self.created_account_id}')
-        
-        if success:
-            required_fields = ['id', 'name', 'village', 'jewellery_items', 'landed_entries']
-            has_all_fields = all(field in data for field in required_fields)
-            if has_all_fields:
-                self.log_test("Get Account Detail", True, "", 
-                            {"name": data.get('name'), "total_landed_amount": data.get('total_landed_amount')})
-            else:
-                missing_fields = [f for f in required_fields if f not in data]
-                self.log_test("Get Account Detail", False, 
-                            f"Missing fields: {missing_fields}", data)
-        else:
-            self.log_test("Get Account Detail", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_update_account(self):
-        """Test updating an account"""
-        if not self.created_account_id:
-            self.log_test("Update Account", False, "No account ID available")
-            return False
-        
-        update_data = {
-            "name": "Updated Test Customer",
-            "details": "Updated details for testing"
-        }
-        
-        success, data, status = self.make_request('PUT', f'/accounts/{self.created_account_id}', update_data)
-        
-        if success and data.get('name') == "Updated Test Customer":
-            self.log_test("Update Account", True, "", {"name": data.get('name')})
-        else:
-            self.log_test("Update Account", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_add_received_entry(self):
-        """Test adding a received payment entry"""
-        if not self.created_account_id:
-            self.log_test("Add Received Entry", False, "No account ID available")
-            return False
-        
-        payment_data = {
-            "date": date.today().isoformat(),
-            "amount": 5000.0
-        }
-        
-        success, data, status = self.make_request('POST', f'/accounts/{self.created_account_id}/received', payment_data)
-        
-        if success:
-            self.log_test("Add Received Entry", True, "", 
-                        {"principal_paid": data.get('principal_paid'), "interest_paid": data.get('interest_paid')})
-        else:
-            self.log_test("Add Received Entry", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_get_account_ledger(self):
-        """Test getting account ledger"""
-        if not self.created_account_id:
-            self.log_test("Get Account Ledger", False, "No account ID available")
-            return False
-        
-        success, data, status = self.make_request('GET', f'/ledger/{self.created_account_id}')
-        
-        if success:
-            entries_count = len(data) if isinstance(data, list) else 0
-            self.log_test("Get Account Ledger", True, "", {"entries": entries_count})
-        else:
-            self.log_test("Get Account Ledger", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_get_villages(self):
-        """Test getting villages list"""
-        success, data, status = self.make_request('GET', '/villages')
-        
-        if success and isinstance(data, list):
-            self.log_test("Get Villages", True, "", {"count": len(data)})
-        else:
-            self.log_test("Get Villages", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_get_users(self):
-        """Test getting users list (admin only)"""
-        success, data, status = self.make_request('GET', '/users')
-        
-        if success and isinstance(data, list):
-            self.log_test("Get Users", True, "", {"count": len(data)})
-        else:
-            self.log_test("Get Users", False, f"Status: {status}", data)
-        
-        return success
-
-    def test_create_user(self):
-        """Test creating a new user"""
-        # Use timestamp to make username unique
+    def test_create_test_user(self):
+        """Create a test user without admin rights"""
         timestamp = datetime.now().strftime('%H%M%S')
         user_data = {
-            "username": f"testuser{timestamp}",
+            "username": f"testuser_{timestamp}",
             "first_name": "Test",
             "last_name": "User",
-            "mobile": f"987654{timestamp[-4:]}",
-            "email": f"test{timestamp}@example.com",
+            "mobile": f"987654{timestamp}",
+            "email": f"test_{timestamp}@example.com",
             "password": "testpass123",
             "status": "active",
             "is_admin": False,
             "permissions": {}
         }
         
-        success, data, status = self.make_request('POST', '/users', user_data, 201)
-        
-        if success and 'id' in data:
-            self.created_user_id = data['id']
-            self.log_test("Create User", True, "", 
-                        {"id": data['id'], "username": data.get('username')})
-        else:
-            self.log_test("Create User", False, f"Status: {status}", data)
-        
+        success, response = self.run_test(
+            "Create Test User",
+            "POST",
+            "api/users",
+            201,
+            data=user_data,
+            token=self.admin_token
+        )
+        if success and 'id' in response:
+            self.test_user_id = response['id']
+            self.test_username = user_data['username']
+            self.test_password = user_data['password']
+            print(f"   Test user created with ID: {self.test_user_id}")
+            return True
+        return False
+
+    def test_user_login(self):
+        """Test user login"""
+        success, response = self.run_test(
+            "Test User Login",
+            "POST",
+            "api/auth/login",
+            200,
+            data={"username": self.test_username, "password": self.test_password}
+        )
+        if success and 'token' in response:
+            self.user_token = response['token']
+            print(f"   User token obtained")
+            return True
+        return False
+
+    def test_accounts_permission_denied(self):
+        """Test that user without permissions cannot access accounts"""
+        success, response = self.run_test(
+            "Accounts Access Without Permission",
+            "GET",
+            "api/accounts",
+            403,
+            token=self.user_token
+        )
         return success
 
-    def test_update_user_permissions(self):
-        """Test updating user permissions"""
-        if not self.created_user_id:
-            self.log_test("Update User Permissions", False, "No user ID available")
-            return False
-        
+    def test_assign_accounts_view_permission(self):
+        """Assign accounts.view permission to test user"""
         permissions = {
-            "accounts": {"view": True, "add": False, "update": False, "delete": False},
+            "accounts": {"view": True, "add": False, "update": False, "delete": False, "close": False},
             "users": {"view": False, "add": False, "update": False, "delete": False},
             "unlock_closed_account": False
         }
         
-        success, data, status = self.make_request('PUT', f'/users/{self.created_user_id}/permissions', permissions)
-        
-        if success:
-            self.log_test("Update User Permissions", True, "", {"message": data.get('message')})
-        else:
-            self.log_test("Update User Permissions", False, f"Status: {status}", data)
-        
+        success, response = self.run_test(
+            "Assign Accounts View Permission",
+            "PUT",
+            f"api/users/{self.test_user_id}/permissions",
+            200,
+            data=permissions,
+            token=self.admin_token
+        )
         return success
 
-    def cleanup_test_data(self):
-        """Clean up test data"""
-        cleanup_success = True
-        
-        # Delete test account
-        if self.created_account_id:
-            success, data, status = self.make_request('DELETE', f'/accounts/{self.created_account_id}')
-            if success:
-                print(f"✅ Cleaned up test account: {self.created_account_id}")
-            else:
-                print(f"⚠️  Failed to cleanup test account: {self.created_account_id}")
-                cleanup_success = False
-        
-        # Delete test user
-        if self.created_user_id:
-            success, data, status = self.make_request('DELETE', f'/users/{self.created_user_id}')
-            if success:
-                print(f"✅ Cleaned up test user: {self.created_user_id}")
-            else:
-                print(f"⚠️  Failed to cleanup test user: {self.created_user_id}")
-                cleanup_success = False
-        
-        return cleanup_success
+    def test_accounts_access_with_permission(self):
+        """Test that user with view permission can access accounts"""
+        success, response = self.run_test(
+            "Accounts Access With Permission",
+            "GET",
+            "api/accounts",
+            200,
+            token=self.user_token
+        )
+        if success:
+            print(f"   User can now access accounts list")
+        return success
 
-    def test_interest_calculation_scenario_1(self):
-        """Test 1 - Partial interest payment scenario"""
-        print("\n🔢 Testing Interest Calculation Scenario 1: Partial Interest Payment")
+    def test_create_account_for_testing(self):
+        """Create an account for testing close/reopen functionality"""
+        # Get date 30 days ago for default filter test
+        past_date = (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')
         
-        # Create account with two landed entries with different rates
         account_data = {
-            "opening_date": "2025-12-15",
-            "name": "Interest Test Customer 1",
+            "opening_date": past_date,
+            "name": "Test Account for Close/Reopen",
             "village": "Test Village",
             "status": "continue",
-            "details": "Test account for interest calculation - Scenario 1",
-            "jewellery_items": [],
+            "details": "Test account for permission testing",
+            "jewellery_items": [
+                {"name": "Gold Ring", "weight": 10.5}
+            ],
             "landed_entries": [
                 {
-                    "date": "2025-12-15",
-                    "amount": 15000.0,
-                    "interest_rate": 2.5
-                },
-                {
-                    "date": "2026-01-15",
-                    "amount": 5000.0,
-                    "interest_rate": 3.0
+                    "date": past_date,
+                    "amount": 50000,
+                    "interest_rate": 2.0
                 }
             ],
-            "received_entries": [
-                {
-                    "date": "2026-03-15",
-                    "amount": 1020.0
-                }
-            ]
+            "received_entries": []
         }
         
-        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
+        success, response = self.run_test(
+            "Create Test Account",
+            "POST",
+            "api/accounts",
+            201,
+            data=account_data,
+            token=self.admin_token
+        )
+        if success and 'id' in response:
+            self.test_account_id = response['id']
+            print(f"   Test account created with ID: {self.test_account_id}")
+            return True
+        return False
+
+    def test_close_account_permission_denied(self):
+        """Test that user without close permission cannot close account"""
+        close_data = {
+            "close_date": datetime.now().strftime('%Y-%m-%d'),
+            "remarks": "Test closure"
+        }
         
-        if success and 'id' in data:
-            account_id = data['id']
-            self.specific_test_accounts.append(account_id)
-            
-            # Check the total pending interest should be 400 (not 0)
-            expected_pending_interest = 400.0
-            actual_pending_interest = data.get('total_pending_interest', 0)
-            
-            if abs(actual_pending_interest - expected_pending_interest) < 1.0:  # Allow small floating point differences
-                self.log_test("Interest Calc Scenario 1", True, "", 
-                            {"expected_pending_interest": expected_pending_interest, 
-                             "actual_pending_interest": actual_pending_interest})
+        success, response = self.run_test(
+            "Close Account Without Permission",
+            "POST",
+            f"api/accounts/{self.test_account_id}/close",
+            403,
+            data=close_data,
+            token=self.user_token
+        )
+        return success
+
+    def test_assign_close_permission(self):
+        """Assign accounts.close permission to test user"""
+        permissions = {
+            "accounts": {"view": True, "add": False, "update": False, "delete": False, "close": True},
+            "users": {"view": False, "add": False, "update": False, "delete": False},
+            "unlock_closed_account": False
+        }
+        
+        success, response = self.run_test(
+            "Assign Close Permission",
+            "PUT",
+            f"api/users/{self.test_user_id}/permissions",
+            200,
+            data=permissions,
+            token=self.admin_token
+        )
+        return success
+
+    def test_close_account_with_permission(self):
+        """Test closing account with proper permission"""
+        close_data = {
+            "close_date": datetime.now().strftime('%Y-%m-%d'),
+            "remarks": "Test closure with permission"
+        }
+        
+        success, response = self.run_test(
+            "Close Account With Permission",
+            "POST",
+            f"api/accounts/{self.test_account_id}/close",
+            200,
+            data=close_data,
+            token=self.user_token
+        )
+        if success:
+            print(f"   Account closed successfully")
+        return success
+
+    def test_ledger_shows_closed_entry(self):
+        """Test that ledger shows CLOSED entry"""
+        success, response = self.run_test(
+            "Verify CLOSED Ledger Entry",
+            "GET",
+            f"api/ledger/{self.test_account_id}",
+            200,
+            token=self.admin_token
+        )
+        if success:
+            # Check if CLOSED entry exists
+            closed_entries = [entry for entry in response if entry.get('transaction_type') == 'CLOSED']
+            if closed_entries:
+                print(f"   ✅ CLOSED ledger entry found")
                 return True
             else:
-                self.log_test("Interest Calc Scenario 1", False, 
-                            f"Expected pending interest: {expected_pending_interest}, got: {actual_pending_interest}", data)
+                print(f"   ❌ CLOSED ledger entry not found")
                 return False
-        else:
-            self.log_test("Interest Calc Scenario 1", False, f"Status: {status}", data)
-            return False
+        return False
 
-    def test_interest_calculation_scenario_2(self):
-        """Test 2 - Payment greater than interest scenario"""
-        print("\n🔢 Testing Interest Calculation Scenario 2: Payment Greater Than Interest")
-        
-        account_data = {
-            "opening_date": "2025-01-01",
-            "name": "Interest Test Customer 2",
-            "village": "Test Village",
-            "status": "continue",
-            "details": "Test account for interest calculation - Scenario 2",
-            "jewellery_items": [],
-            "landed_entries": [
-                {
-                    "date": "2025-01-01",
-                    "amount": 10000.0,
-                    "interest_rate": 2.0
-                }
-            ],
-            "received_entries": [
-                {
-                    "date": "2025-02-01",
-                    "amount": 800.0  # Should be greater than 1 month interest (≈66.67)
-                }
-            ]
+    def test_reopen_without_permission(self):
+        """Test that user without unlock permission cannot reopen account"""
+        reopen_data = {
+            "reason": "Test reopening without permission"
         }
         
-        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
-        
-        if success and 'id' in data:
-            account_id = data['id']
-            self.specific_test_accounts.append(account_id)
-            
-            # Check that interest was paid first, then principal was reduced
-            received_entries = data.get('received_entries', [])
-            if received_entries:
-                entry = received_entries[0]
-                interest_paid = entry.get('interest_paid', 0)
-                principal_paid = entry.get('principal_paid', 0)
-                
-                # Interest should be paid first
-                if interest_paid > 0 and principal_paid > 0:
-                    self.log_test("Interest Calc Scenario 2", True, "", 
-                                {"interest_paid": interest_paid, "principal_paid": principal_paid})
-                    return True
-                else:
-                    self.log_test("Interest Calc Scenario 2", False, 
-                                f"Expected both interest and principal payment, got interest: {interest_paid}, principal: {principal_paid}")
-                    return False
-            else:
-                self.log_test("Interest Calc Scenario 2", False, "No received entries found", data)
-                return False
-        else:
-            self.log_test("Interest Calc Scenario 2", False, f"Status: {status}", data)
-            return False
+        success, response = self.run_test(
+            "Reopen Account Without Permission",
+            "POST",
+            f"api/accounts/{self.test_account_id}/reopen",
+            403,
+            data=reopen_data,
+            token=self.user_token
+        )
+        return success
 
-    def test_multiple_landed_entries_calculation(self):
-        """Test 3 - Multiple landed entries with different rates"""
-        print("\n🔢 Testing Multiple Landed Entries Interest Calculation")
-        
-        account_data = {
-            "opening_date": "2025-01-01",
-            "name": "Multiple Entries Test Customer",
-            "village": "Test Village",
-            "status": "continue",
-            "details": "Test account for multiple landed entries",
-            "jewellery_items": [],
-            "landed_entries": [
-                {
-                    "date": "2025-01-01",
-                    "amount": 10000.0,
-                    "interest_rate": 2.0
-                },
-                {
-                    "date": "2025-01-15",
-                    "amount": 5000.0,
-                    "interest_rate": 3.0
-                },
-                {
-                    "date": "2025-02-01",
-                    "amount": 7500.0,
-                    "interest_rate": 2.5
-                }
-            ],
-            "received_entries": []
+    def test_reopen_without_reason(self):
+        """Test that reopening requires mandatory reason"""
+        reopen_data = {
+            "reason": ""
         }
         
-        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
-        
-        if success and 'id' in data:
-            account_id = data['id']
-            self.specific_test_accounts.append(account_id)
-            
-            # Verify each landed entry has its own interest calculation
-            landed_entries = data.get('landed_entries', [])
-            if len(landed_entries) == 3:
-                # Check that each entry maintains its own interest rate and calculation
-                rates_match = all(entry.get('interest_rate') in [2.0, 3.0, 2.5] for entry in landed_entries)
-                all_have_remaining_principal = all('remaining_principal' in entry for entry in landed_entries)
-                
-                if rates_match and all_have_remaining_principal:
-                    self.log_test("Multiple Landed Entries", True, "", 
-                                {"entries_count": len(landed_entries), "rates": [e.get('interest_rate') for e in landed_entries]})
-                    return True
-                else:
-                    self.log_test("Multiple Landed Entries", False, 
-                                "Entries missing required fields or incorrect rates")
-                    return False
-            else:
-                self.log_test("Multiple Landed Entries", False, 
-                            f"Expected 3 landed entries, got {len(landed_entries)}")
-                return False
-        else:
-            self.log_test("Multiple Landed Entries", False, f"Status: {status}", data)
-            return False
+        success, response = self.run_test(
+            "Reopen Account Without Reason",
+            "POST",
+            f"api/accounts/{self.test_account_id}/reopen",
+            400,
+            data=reopen_data,
+            token=self.admin_token
+        )
+        return success
 
-    def test_interest_carry_forward(self):
-        """Test 4 - Interest carry forward after partial payment"""
-        print("\n🔢 Testing Interest Carry Forward")
-        
-        # Create account and then add partial payment
-        account_data = {
-            "opening_date": "2025-01-01",
-            "name": "Carry Forward Test Customer",
-            "village": "Test Village",
-            "status": "continue",
-            "details": "Test account for interest carry forward",
-            "jewellery_items": [],
-            "landed_entries": [
-                {
-                    "date": "2025-01-01",
-                    "amount": 20000.0,
-                    "interest_rate": 3.0
-                }
-            ],
-            "received_entries": []
+    def test_assign_unlock_permission(self):
+        """Assign unlock_closed_account permission to test user"""
+        permissions = {
+            "accounts": {"view": True, "add": False, "update": False, "delete": False, "close": True},
+            "users": {"view": False, "add": False, "update": False, "delete": False},
+            "unlock_closed_account": True
         }
         
-        success, data, status = self.make_request('POST', '/accounts', account_data, 201)
+        success, response = self.run_test(
+            "Assign Unlock Permission",
+            "PUT",
+            f"api/users/{self.test_user_id}/permissions",
+            200,
+            data=permissions,
+            token=self.admin_token
+        )
+        return success
+
+    def test_reopen_account_with_permission(self):
+        """Test reopening account with proper permission and reason"""
+        reopen_data = {
+            "reason": "Reopening for additional transactions as requested by customer"
+        }
         
-        if success and 'id' in data:
-            account_id = data['id']
-            self.specific_test_accounts.append(account_id)
-            
-            # Add a small payment that doesn't cover full interest
-            payment_data = {
-                "date": "2025-03-01",  # 2 months later
-                "amount": 200.0  # Less than 2 months interest
-            }
-            
-            payment_success, payment_data_resp, payment_status = self.make_request(
-                'POST', f'/accounts/{account_id}/received', payment_data)
-            
-            if payment_success:
-                remaining_interest = payment_data_resp.get('remaining_interest', 0)
-                if remaining_interest > 0:
-                    self.log_test("Interest Carry Forward", True, "", 
-                                {"remaining_interest": remaining_interest})
-                    return True
-                else:
-                    self.log_test("Interest Carry Forward", False, 
-                                f"Expected remaining interest > 0, got {remaining_interest}")
-                    return False
+        success, response = self.run_test(
+            "Reopen Account With Permission",
+            "POST",
+            f"api/accounts/{self.test_account_id}/reopen",
+            200,
+            data=reopen_data,
+            token=self.user_token
+        )
+        if success:
+            print(f"   Account reopened successfully")
+        return success
+
+    def test_ledger_shows_reopened_entry(self):
+        """Test that ledger shows REOPENED entry"""
+        success, response = self.run_test(
+            "Verify REOPENED Ledger Entry",
+            "GET",
+            f"api/ledger/{self.test_account_id}",
+            200,
+            token=self.admin_token
+        )
+        if success:
+            # Check if REOPENED entry exists
+            reopened_entries = [entry for entry in response if entry.get('transaction_type') == 'REOPENED']
+            if reopened_entries:
+                print(f"   ✅ REOPENED ledger entry found")
+                return True
             else:
-                self.log_test("Interest Carry Forward", False, f"Payment failed: {payment_status}")
+                print(f"   ❌ REOPENED ledger entry not found")
                 return False
-        else:
-            self.log_test("Interest Carry Forward", False, f"Account creation failed: {status}")
+        return False
+
+    def test_villages_endpoint(self):
+        """Test villages endpoint for dropdown functionality"""
+        success, response = self.run_test(
+            "Villages List",
+            "GET",
+            "api/villages",
+            200,
+            token=self.admin_token
+        )
+        if success and isinstance(response, list):
+            print(f"   Found {len(response)} villages")
+            if "Test Village" in response:
+                print(f"   ✅ Test village found in list")
+            return True
+        return success
+
+    def test_accounts_with_date_filter(self):
+        """Test accounts endpoint with date filter (past 30 days)"""
+        # Test with past 30 days filter
+        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        
+        success, response = self.run_test(
+            "Accounts with Date Filter (Past 30 Days)",
+            "GET",
+            f"api/accounts?start_date={start_date}&end_date={end_date}",
+            200,
+            token=self.admin_token
+        )
+        if success:
+            accounts = response.get('accounts', [])
+            print(f"   Found {len(accounts)} accounts in past 30 days")
+            return True
+        return success
+
+    def test_inactive_user_auto_logout(self):
+        """Test that inactive users are automatically logged out"""
+        # First, deactivate the test user
+        success, response = self.run_test(
+            "Deactivate Test User",
+            "PUT",
+            f"api/users/{self.test_user_id}/status",
+            200,
+            token=self.admin_token
+        )
+        
+        if not success:
             return False
+        
+        # Try to access accounts with inactive user token
+        success, response = self.run_test(
+            "Access with Inactive User Token",
+            "GET",
+            "api/accounts",
+            403,  # Should be forbidden due to inactive status
+            token=self.user_token
+        )
+        return success
 
-    def cleanup_specific_test_accounts(self):
-        """Clean up specific test accounts"""
-        cleanup_success = True
+    def cleanup(self):
+        """Clean up test data"""
+        if self.test_account_id:
+            self.run_test(
+                "Cleanup Test Account",
+                "DELETE",
+                f"api/accounts/{self.test_account_id}",
+                200,
+                token=self.admin_token
+            )
         
-        for account_id in self.specific_test_accounts:
-            success, data, status = self.make_request('DELETE', f'/accounts/{account_id}')
-            if success:
-                print(f"✅ Cleaned up test account: {account_id}")
-            else:
-                print(f"⚠️  Failed to cleanup test account: {account_id}")
-                cleanup_success = False
-        
-        return cleanup_success
-
-    def run_all_tests(self):
-        """Run all API tests"""
-        print("🚀 Starting LendLedger Backend API Tests...")
-        print("=" * 60)
-        
-        # Basic connectivity and auth tests
-        print("\n📡 Testing Basic Connectivity...")
-        if not self.test_health_check():
-            print("❌ Health check failed - backend might be down")
-            return False
-        
-        if not self.test_admin_login():
-            print("❌ Admin login failed - cannot proceed with authenticated tests")
-            return False
-        
-        self.test_get_current_user()
-        
-        # Dashboard tests
-        print("\n📊 Testing Dashboard Endpoints...")
-        self.test_dashboard_summary()
-        self.test_dashboard_stats()
-        
-        # Account management tests
-        print("\n💼 Testing Account Management...")
-        self.test_get_accounts_list()
-        if self.test_create_account():
-            self.test_get_account_detail()
-            self.test_update_account()
-            self.test_add_received_entry()
-            self.test_get_account_ledger()
-        
-        # Data lookup tests
-        print("\n🔍 Testing Data Lookups...")
-        self.test_get_villages()
-        
-        # User management tests (admin only)
-        print("\n👥 Testing User Management...")
-        self.test_get_users()
-        if self.test_create_user():
-            self.test_update_user_permissions()
-        
-        # Specific Interest Calculation Tests
-        print("\n🔢 Testing Interest Calculation Scenarios...")
-        self.test_interest_calculation_scenario_1()
-        self.test_interest_calculation_scenario_2() 
-        self.test_multiple_landed_entries_calculation()
-        self.test_interest_carry_forward()
-        
-        # Cleanup
-        print("\n🧹 Cleaning up test data...")
-        self.cleanup_test_data()
-        self.cleanup_specific_test_accounts()
-        
-        return True
-
-    def print_summary(self):
-        """Print test summary"""
-        print("\n" + "=" * 60)
-        print("📋 TEST SUMMARY")
-        print("=" * 60)
-        print(f"Total Tests: {self.tests_run}")
-        print(f"Passed: {self.tests_passed}")
-        print(f"Failed: {self.tests_run - self.tests_passed}")
-        print(f"Success Rate: {(self.tests_passed / self.tests_run * 100):.1f}%" if self.tests_run > 0 else "0%")
-        
-        # Print failed tests
-        failed_tests = [r for r in self.test_results if r['status'] == 'FAILED']
-        if failed_tests:
-            print(f"\n❌ FAILED TESTS:")
-            for test in failed_tests:
-                print(f"  - {test['test']}: {test['details']}")
-        
-        print("\n✨ Testing completed!")
-        
-        return self.tests_passed == self.tests_run
-
+        if self.test_user_id:
+            self.run_test(
+                "Cleanup Test User",
+                "DELETE",
+                f"api/users/{self.test_user_id}",
+                200,
+                token=self.admin_token
+            )
 
 def main():
-    """Main function to run tests"""
-    tester = LendLedgerAPITester()
+    print("🚀 Starting Jewellery Lending System Permission Testing...")
+    tester = JewelleryLendingSystemTester()
     
     try:
-        success = tester.run_all_tests()
-        tester.print_summary()
-        return 0 if success else 1
-    except Exception as e:
-        print(f"❌ Testing failed with error: {str(e)}")
-        return 1
-
+        # Authentication Tests
+        if not tester.test_admin_login():
+            print("❌ Admin login failed, stopping tests")
+            return 1
+        
+        # User Management and Permission Tests
+        if not tester.test_create_test_user():
+            print("❌ Test user creation failed")
+            return 1
+        
+        if not tester.test_user_login():
+            print("❌ Test user login failed")
+            return 1
+        
+        # Permission-based Access Control Tests
+        if not tester.test_accounts_permission_denied():
+            print("❌ Permission denial test failed")
+            return 1
+        
+        if not tester.test_assign_accounts_view_permission():
+            print("❌ Permission assignment failed")
+            return 1
+        
+        if not tester.test_accounts_access_with_permission():
+            print("❌ Access with permission failed")
+            return 1
+        
+        # Account Creation for Testing
+        if not tester.test_create_account_for_testing():
+            print("❌ Test account creation failed")
+            return 1
+        
+        # Close Account Permission Tests
+        if not tester.test_close_account_permission_denied():
+            print("❌ Close permission denial test failed")
+            return 1
+        
+        if not tester.test_assign_close_permission():
+            print("❌ Close permission assignment failed")
+            return 1
+        
+        if not tester.test_close_account_with_permission():
+            print("❌ Close account test failed")
+            return 1
+        
+        if not tester.test_ledger_shows_closed_entry():
+            print("❌ CLOSED ledger entry test failed")
+            return 1
+        
+        # Reopen Account Permission Tests
+        if not tester.test_reopen_without_permission():
+            print("❌ Reopen permission denial test failed")
+            return 1
+        
+        if not tester.test_reopen_without_reason():
+            print("❌ Mandatory reason test failed")
+            return 1
+        
+        if not tester.test_assign_unlock_permission():
+            print("❌ Unlock permission assignment failed")
+            return 1
+        
+        if not tester.test_reopen_account_with_permission():
+            print("❌ Reopen account test failed")
+            return 1
+        
+        if not tester.test_ledger_shows_reopened_entry():
+            print("❌ REOPENED ledger entry test failed")
+            return 1
+        
+        # Additional Feature Tests
+        if not tester.test_villages_endpoint():
+            print("❌ Villages endpoint test failed")
+            return 1
+        
+        if not tester.test_accounts_with_date_filter():
+            print("❌ Date filter test failed")
+            return 1
+        
+        if not tester.test_inactive_user_auto_logout():
+            print("❌ Inactive user auto-logout test failed")
+            return 1
+        
+        # Print results
+        print(f"\n📊 Tests completed: {tester.tests_passed}/{tester.tests_run}")
+        print(f"✅ Success rate: {(tester.tests_passed/tester.tests_run)*100:.1f}%")
+        
+        if tester.tests_passed == tester.tests_run:
+            print("\n🎉 All permission-based features working correctly!")
+            return 0
+        else:
+            print(f"\n⚠️  {tester.tests_run - tester.tests_passed} tests failed")
+            return 1
+    
+    finally:
+        # Cleanup
+        print("\n🧹 Cleaning up test data...")
+        tester.cleanup()
 
 if __name__ == "__main__":
     sys.exit(main())

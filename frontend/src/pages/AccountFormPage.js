@@ -9,21 +9,25 @@ import { Spinner } from '../components/ui/Spinner';
 import { toast } from 'sonner';
 import { ArrowLeft, Plus, Trash2, Gem, TrendingUp, TrendingDown, Save } from 'lucide-react';
 
+// Get today's date for max date
+const getToday = () => new Date().toISOString().split('T')[0];
+
 export default function AccountFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const today = getToday();
 
   const [formData, setFormData] = useState({
-    opening_date: new Date().toISOString().split('T')[0],
+    opening_date: today,
     name: '',
     village: '',
     status: 'continue',
     details: '',
     jewellery_items: [{ name: '', weight: '' }],
-    landed_entries: [{ date: new Date().toISOString().split('T')[0], amount: '', interest_rate: '2' }],
+    landed_entries: [{ date: today, amount: '', interest_rate: '2' }],
     received_entries: []
   });
 
@@ -279,6 +283,7 @@ export default function AccountFormPage() {
                   name="opening_date"
                   value={formData.opening_date}
                   onChange={handleChange}
+                  max={today}
                   required
                 />
               </div>
@@ -430,6 +435,7 @@ export default function AccountFormPage() {
                       type="date"
                       value={entry.date}
                       onChange={(e) => updateLandedEntry(index, 'date', e.target.value)}
+                      max={today}
                     />
                   </div>
                   <div className="flex-1">
@@ -507,6 +513,7 @@ export default function AccountFormPage() {
                         type="date"
                         value={entry.date}
                         onChange={(e) => updateReceivedEntry(index, 'date', e.target.value)}
+                        max={today}
                       />
                     </div>
                     <div className="flex-1">

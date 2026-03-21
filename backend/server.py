@@ -76,9 +76,28 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
         user = await users_collection.find_one({"_id": ObjectId(user_id)})
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
+        # Check if user is active
+        if user.get("status") != "active":
+            raise HTTPException(status_code=403, detail="User account is inactive. Please contact administrator.")
         return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+def check_permission(user: dict, module: str, action: str) -> bool:
+    """Check if user has permission for a specific action on a module"""
+    if user.get("is_admin"):
+        return True
+    permissions = user.get("permissions", {})
+    module_perms = permissions.get(module, {})
+    return module_perms.get(action, False) == True
+
+def require_permission(module: str, action: str):
+    """Decorator-like function to check permissions"""
+    async def check(current_user: dict = Depends(verify_token)):
+        if not check_permission(current_user, module, action):
+            raise HTTPException(status_code=403, detail=f"Permission denied: {module}.{action}")
+        return current_user
+    return check
 
 def serialize_doc(doc):
     """Convert MongoDB document to JSON serializable format"""
@@ -178,6 +197,13 @@ class AccountUpdate(BaseModel):
     jewellery_items: Optional[List[JewelleryItem]] = None
     landed_entries: Optional[List[LandedEntry]] = None
     received_entries: Optional[List[ReceivedEntry]] = None
+
+class CloseAccountRequest(BaseModel):
+    close_date: str
+    remarks: Optional[str] = ""
+
+class ReopenAccountRequest(BaseModel):
+    reason: str  # Mandatory field
 
 # Interest Calculation Logic
 def calculate_interest_for_entry(landed_entry: dict, calc_date: datetime) -> dict:
@@ -580,6 +606,10 @@ async def get_accounts(
     sort_by: str = "account_number",
     sort_order: str = "desc"
 ):
+    # Check view permission
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "view"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.view")
+    
     query = {}
     
     if search:
@@ -596,6 +626,10 @@ async def get_accounts(
     
     if start_date and end_date:
         query["opening_date"] = {"$gte": start_date, "$lte": end_date}
+    elif start_date:
+        query["opening_date"] = {"$gte": start_date}
+    elif end_date:
+        query["opening_date"] = {"$lte": end_date}
     
     # Sorting
     sort_direction = -1 if sort_order == "desc" else 1
@@ -624,16 +658,14 @@ async def get_accounts(
 
 @app.get("/api/accounts/{account_id}")
 async def get_account(account_id: str, current_user: dict = Depends(verify_token)):
+    # Check view permission
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "view"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.view")
+    
     account = await accounts_collection.find_one({"_id": ObjectId(account_id)})
     
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
-    
-    # Check if account is closed and user doesn't have permission
-    if account.get("status") == "closed":
-        if not current_user.get("is_admin") and not current_user.get("permissions", {}).get("unlock_closed_account"):
-            # User can view but not modify
-            pass
     
     # Enrich landed entries with calculated interest details
     now = datetime.now(timezone.utc)
@@ -654,10 +686,28 @@ async def get_account(account_id: str, current_user: dict = Depends(verify_token
     account_data = serialize_doc(account)
     account_data.update(totals)
     
+    # Add user permissions info for frontend
+    account_data["user_can_edit"] = current_user.get("is_admin") or check_permission(current_user, "accounts", "update")
+    account_data["user_can_delete"] = current_user.get("is_admin") or check_permission(current_user, "accounts", "delete")
+    account_data["user_can_add"] = current_user.get("is_admin") or check_permission(current_user, "accounts", "add")
+    account_data["user_can_close"] = current_user.get("is_admin") or check_permission(current_user, "accounts", "close")
+    account_data["user_can_unlock"] = current_user.get("is_admin") or current_user.get("permissions", {}).get("unlock_closed_account", False)
+    
+    # If account is closed, only users with unlock permission can edit
+    if account.get("status") == "closed":
+        if not account_data["user_can_unlock"]:
+            account_data["user_can_edit"] = False
+            account_data["user_can_delete"] = False
+            account_data["user_can_add"] = False
+    
     return account_data
 
 @app.post("/api/accounts", status_code=201)
 async def create_account(account: AccountCreate, current_user: dict = Depends(verify_token)):
+    # Check add permission
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "add"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.add")
+    
     # Get next account number
     account_number = await get_next_account_number()
     
@@ -751,6 +801,10 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
     
     if not existing:
         raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Check update permission
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "update"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.update")
     
     # Check if account is closed
     if existing.get("status") == "closed":
@@ -890,17 +944,140 @@ async def delete_account(account_id: str, current_user: dict = Depends(verify_to
     if not existing:
         raise HTTPException(status_code=404, detail="Account not found")
     
-    # Check permissions
-    if not current_user.get("is_admin"):
-        perms = current_user.get("permissions", {})
-        if not perms.get("accounts", {}).get("delete"):
-            raise HTTPException(status_code=403, detail="Permission denied")
+    # Check delete permission
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "delete"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.delete")
+    
+    # Check if account is closed
+    if existing.get("status") == "closed":
+        if not current_user.get("is_admin") and not current_user.get("permissions", {}).get("unlock_closed_account"):
+            raise HTTPException(status_code=403, detail="Cannot delete closed account")
     
     # Delete account and related ledger entries
     await accounts_collection.delete_one({"_id": ObjectId(account_id)})
     await ledger_collection.delete_many({"account_id": account_id})
     
     return {"message": "Account deleted successfully"}
+
+# Close Account Route
+@app.post("/api/accounts/{account_id}/close")
+async def close_account(account_id: str, request: CloseAccountRequest, current_user: dict = Depends(verify_token)):
+    existing = await accounts_collection.find_one({"_id": ObjectId(account_id)})
+    
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Check close permission
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "close"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.close")
+    
+    if existing.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Account is already closed")
+    
+    # Calculate final totals
+    totals = calculate_account_totals(existing)
+    
+    close_date = datetime.fromisoformat(request.close_date)
+    
+    # Update account status
+    await accounts_collection.update_one(
+        {"_id": ObjectId(account_id)},
+        {
+            "$set": {
+                "status": "closed",
+                "closed_at": close_date,
+                "closed_by": str(current_user["_id"]),
+                "closed_by_name": f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get('username'),
+                "close_remarks": request.remarks,
+                "final_pending_amount": totals["total_pending_amount"],
+                "final_pending_interest": totals["total_pending_interest"],
+                "updated_at": datetime.now(timezone.utc),
+                "updated_by": str(current_user["_id"])
+            }
+        }
+    )
+    
+    # Create ledger entry for account closure
+    await create_ledger_entry(
+        account_id,
+        "CLOSED",
+        0,
+        0,
+        0,
+        totals["total_pending_amount"],
+        str(current_user["_id"]),
+        request.close_date,
+        remaining_interest=0.0,
+        remaining_principal=totals["total_pending_amount"]
+    )
+    
+    return {
+        "message": "Account closed successfully",
+        "closed_at": request.close_date,
+        "final_pending_amount": totals["total_pending_amount"],
+        "final_pending_interest": totals["total_pending_interest"]
+    }
+
+# Reopen Account Route
+@app.post("/api/accounts/{account_id}/reopen")
+async def reopen_account(account_id: str, request: ReopenAccountRequest, current_user: dict = Depends(verify_token)):
+    existing = await accounts_collection.find_one({"_id": ObjectId(account_id)})
+    
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Check unlock permission
+    if not current_user.get("is_admin") and not current_user.get("permissions", {}).get("unlock_closed_account"):
+        raise HTTPException(status_code=403, detail="Permission denied: Only users with 'Unlock Closed Account' permission can reopen accounts")
+    
+    if existing.get("status") != "closed":
+        raise HTTPException(status_code=400, detail="Account is not closed")
+    
+    if not request.reason or not request.reason.strip():
+        raise HTTPException(status_code=400, detail="Reason for reopening is mandatory")
+    
+    reopen_date = datetime.now(timezone.utc)
+    
+    # Store reopen history
+    reopen_entry = {
+        "reopened_at": reopen_date.isoformat(),
+        "reopened_by": str(current_user["_id"]),
+        "reopened_by_name": f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get('username'),
+        "reason": request.reason
+    }
+    
+    # Update account status
+    await accounts_collection.update_one(
+        {"_id": ObjectId(account_id)},
+        {
+            "$set": {
+                "status": "continue",
+                "updated_at": reopen_date,
+                "updated_by": str(current_user["_id"])
+            },
+            "$push": {"reopen_history": reopen_entry}
+        }
+    )
+    
+    # Create ledger entry for account reopen
+    await create_ledger_entry(
+        account_id,
+        "REOPENED",
+        0,
+        0,
+        0,
+        existing.get("final_pending_amount", 0),
+        str(current_user["_id"]),
+        reopen_date.isoformat(),
+        remaining_interest=0.0,
+        remaining_principal=existing.get("final_pending_amount", 0)
+    )
+    
+    return {
+        "message": "Account reopened successfully",
+        "reopened_at": reopen_date.isoformat(),
+        "reason": request.reason
+    }
 
 # Landed Entry Routes
 @app.post("/api/accounts/{account_id}/landed")
@@ -910,10 +1087,19 @@ async def add_landed_entry(account_id: str, entry: LandedEntry, current_user: di
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     
+    # Check add permission
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "add"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.add")
+    
+    # Check if account is closed
+    if account.get("status") == "closed":
+        if not current_user.get("is_admin") and not current_user.get("permissions", {}).get("unlock_closed_account"):
+            raise HTTPException(status_code=403, detail="Cannot add entries to closed account")
+    
     entry_dict = entry.model_dump()
     entry_dict["remaining_principal"] = entry.amount
-    entry_dict["last_interest_calc_date"] = entry.date
-    entry_dict["accumulated_interest"] = 0.0
+    entry_dict["interest_start_date"] = entry.date
+    entry_dict["carried_forward_interest"] = 0.0
     
     await accounts_collection.update_one(
         {"_id": ObjectId(account_id)},
@@ -949,6 +1135,15 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
     
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Check add permission
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "add"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.add")
+    
+    # Check if account is closed
+    if account.get("status") == "closed":
+        if not current_user.get("is_admin") and not current_user.get("permissions", {}).get("unlock_closed_account"):
+            raise HTTPException(status_code=403, detail="Cannot add entries to closed account")
     
     payment_date = datetime.fromisoformat(entry.date)
     landed_entries = account.get("landed_entries", [])
