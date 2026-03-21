@@ -610,6 +610,7 @@ export default function AccountFormPage() {
                       type="date"
                       value={entry.date}
                       onChange={(e) => updateLandedEntry(index, 'date', e.target.value)}
+                      min={formData.opening_date}
                       max={today}
                     />
                   </div>
@@ -688,6 +689,7 @@ export default function AccountFormPage() {
                         type="date"
                         value={entry.date}
                         onChange={(e) => updateReceivedEntry(index, 'date', e.target.value)}
+                        min={formData.opening_date}
                         max={today}
                       />
                     </div>

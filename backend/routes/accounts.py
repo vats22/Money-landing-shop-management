@@ -310,6 +310,14 @@ async def add_landed_entry(account_id: str, entry: LandedEntry, current_user: di
         raise HTTPException(status_code=403, detail="Permission denied: accounts.add")
     if account.get("status") == "closed":
         raise HTTPException(status_code=403, detail="Cannot add entries to a closed account. Please reopen it first.")
+    # Validate entry date is not before account opening date
+    opening_date = account.get("opening_date", "")
+    if opening_date and entry.date < opening_date:
+        raise HTTPException(status_code=400, detail=f"Entry date cannot be before account opening date ({opening_date})")
+    # Validate entry date is not in the future
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if entry.date > today_str:
+        raise HTTPException(status_code=400, detail="Entry date cannot be in the future")
     entry_dict = entry.model_dump()
     entry_dict["remaining_principal"] = entry.amount
     entry_dict["interest_start_date"] = entry.date
@@ -337,6 +345,14 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
         raise HTTPException(status_code=403, detail="Permission denied: accounts.add")
     if account.get("status") == "closed":
         raise HTTPException(status_code=403, detail="Cannot add entries to a closed account. Please reopen it first.")
+    # Validate entry date is not before account opening date
+    opening_date = account.get("opening_date", "")
+    if opening_date and entry.date < opening_date:
+        raise HTTPException(status_code=400, detail=f"Entry date cannot be before account opening date ({opening_date})")
+    # Validate entry date is not in the future
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if entry.date > today_str:
+        raise HTTPException(status_code=400, detail="Entry date cannot be in the future")
     payment_date = datetime.fromisoformat(entry.date)
     landed_entries = account.get("landed_entries", [])
     landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(

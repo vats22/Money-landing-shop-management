@@ -29,7 +29,6 @@ export default function AccountDetailPage() {
   
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
-  const [closeDate, setCloseDate] = useState(getToday());
   const [closeRemarks, setCloseRemarks] = useState('');
   const [reopenReason, setReopenReason] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -60,10 +59,9 @@ export default function AccountDetailPage() {
   };
 
   const handleClose = async () => {
-    if (!closeDate) { toast.error('Please select a close date'); return; }
     setProcessing(true);
     try {
-      await api.post(`/api/accounts/${id}/close`, { close_date: closeDate, remarks: closeRemarks });
+      await api.post(`/api/accounts/${id}/close`, { close_date: getToday(), remarks: closeRemarks });
       toast.success('Account closed successfully');
       setShowCloseModal(false);
       fetchAccountData();
@@ -140,7 +138,7 @@ export default function AccountDetailPage() {
   if (historyEvents.length === 0 && account.closed_at) {
     historyEvents.push({ type: 'CLOSED', date: account.closed_at, by: account.closed_by_name, remarks: account.close_remarks, pending: account.final_pending_amount, interest: account.final_pending_interest });
   }
-  historyEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+  historyEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className="space-y-6 animate-fadeIn" data-testid="account-detail-page">
@@ -509,8 +507,9 @@ export default function AccountDetailPage() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Close Date *</label>
-            <Input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} max={getToday()} data-testid="close-date-input" />
+            <label className="block text-sm font-medium text-slate-700 mb-2">Close Date</label>
+            <Input type="text" value={new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} disabled className="bg-slate-100 cursor-not-allowed" data-testid="close-date-input" />
+            <p className="text-xs text-slate-400 mt-1">Close date is automatically set to today</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Remarks (Optional)</label>
