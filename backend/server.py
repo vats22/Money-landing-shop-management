@@ -11,6 +11,7 @@ from routes.dashboard import router as dashboard_router
 from routes.accounts import router as accounts_router
 from routes.reports import router as reports_router
 from routes.export import router as export_router
+from routes.images import router as images_router
 
 # FastAPI App
 app = FastAPI(title="LendLedger API", version="2.0.0")
@@ -31,6 +32,7 @@ app.include_router(dashboard_router)
 app.include_router(accounts_router)
 app.include_router(reports_router)
 app.include_router(export_router)
+app.include_router(images_router)
 
 
 @app.get("/api/health")

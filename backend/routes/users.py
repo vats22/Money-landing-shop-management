@@ -1,12 +1,19 @@
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone
 from bson import ObjectId
+import re
 from auth import verify_token, get_password_hash
 from config import users_collection
 from models import UserCreate, UserUpdate
 from utils import serialize_doc
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+MOBILE_REGEX = re.compile(r'^[6-9]\d{9}$')
+
+def validate_mobile(mobile: str):
+    if not MOBILE_REGEX.match(mobile):
+        raise HTTPException(status_code=400, detail="Invalid mobile number. Must be 10 digits starting with 6, 7, 8 or 9.")
 
 
 @router.get("")
@@ -21,6 +28,7 @@ async def get_users(current_user: dict = Depends(verify_token)):
 async def create_user(user: UserCreate, current_user: dict = Depends(verify_token)):
     if not current_user.get("is_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
+    validate_mobile(user.mobile)
     existing = await users_collection.find_one({
         "$or": [{"username": user.username}, {"mobile": user.mobile}]
     })
@@ -43,6 +51,8 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
     if not current_user.get("is_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
     update_data = {k: v for k, v in user.model_dump().items() if v is not None}
+    if "mobile" in update_data:
+        validate_mobile(update_data["mobile"])
     if "password" in update_data:
         update_data["password"] = get_password_hash(update_data["password"])
     update_data["updated_at"] = datetime.now(timezone.utc)

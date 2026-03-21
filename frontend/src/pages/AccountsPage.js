@@ -208,10 +208,10 @@ export default function AccountsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-2">
+            <div>
               <Input
                 data-testid="search-input"
-                placeholder="Search by name or account #"
+                placeholder="Search name / account #"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}

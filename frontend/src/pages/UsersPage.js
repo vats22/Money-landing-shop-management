@@ -113,6 +113,12 @@ export default function UsersPage() {
       toast.error('Please fill all required fields');
       return;
     }
+
+    // Mobile number validation: 10 digits starting with 6-9
+    if (!/^[6-9]\d{9}$/.test(formData.mobile)) {
+      toast.error('Invalid mobile number. Must be 10 digits starting with 6, 7, 8 or 9.');
+      return;
+    }
     
     if (!editingUser && !formData.password) {
       toast.error('Password is required for new users');
@@ -359,9 +365,15 @@ export default function UsersPage() {
               <Input
                 data-testid="user-mobile"
                 value={formData.mobile}
-                onChange={(e) => setFormData(prev => ({ ...prev, mobile: e.target.value }))}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setFormData(prev => ({ ...prev, mobile: val }));
+                }}
                 placeholder="9876543210"
                 required
+                maxLength={10}
+                pattern="[6-9][0-9]{9}"
+                title="10 digit mobile number starting with 6, 7, 8 or 9"
               />
             </div>
             <div>

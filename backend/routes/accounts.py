@@ -241,6 +241,12 @@ async def close_account(account_id: str, request: CloseAccountRequest, current_u
     totals = calculate_account_totals(existing)
     close_date = datetime.fromisoformat(request.close_date)
     user_name = f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get('username')
+    close_entry = {
+        "closed_at": close_date.isoformat(), "closed_by": str(current_user["_id"]),
+        "closed_by_name": user_name, "remarks": request.remarks,
+        "final_pending_amount": totals["total_pending_amount"],
+        "final_pending_interest": totals["total_pending_interest"]
+    }
     await accounts_collection.update_one(
         {"_id": ObjectId(account_id)},
         {"$set": {
@@ -250,7 +256,8 @@ async def close_account(account_id: str, request: CloseAccountRequest, current_u
             "final_pending_amount": totals["total_pending_amount"],
             "final_pending_interest": totals["total_pending_interest"],
             "updated_at": datetime.now(timezone.utc), "updated_by": str(current_user["_id"])
-        }}
+        },
+         "$push": {"close_history": close_entry}}
     )
     await create_ledger_entry(
         account_id, "CLOSED", 0, 0, 0, totals["total_pending_amount"],
