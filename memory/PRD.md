@@ -11,70 +11,60 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 
 ## User Personas
 1. **Master Admin** - Full system access, manages users and permissions
-2. **Regular Users** - Access based on assigned permissions
+2. **Regular Users** - Access based on assigned permissions (operator, viewer)
 
 ## Technology Stack
-- **Frontend**: React 18, Tailwind CSS, React Router
-- **Backend**: Python FastAPI, Motor (async MongoDB driver)
-- **Database**: MongoDB
+- **Frontend**: React 18, Tailwind CSS, React Router, Recharts
+- **Backend**: Python FastAPI (modular structure with APIRouter)
+- **Database**: MongoDB (Motor async driver)
 - **Auth**: JWT Authentication with bcrypt password hashing
 
-## Core Requirements (Static)
+## Core Requirements
 - [x] Login with username/mobile + password (no signup)
-- [x] Dashboard with 4 summary cards
+- [x] Dashboard with 4 summary cards + stats
 - [x] Accounts management with full CRUD
 - [x] Jewellery items tracking per account
 - [x] Landed entries (money lent) with interest rates
 - [x] Received entries (payments) with automatic distribution
-- [x] Ledger system for audit trail
+- [x] Ledger system for audit trail (chronological)
 - [x] User management (Admin only)
 - [x] Permission system per module
+- [x] Close/Reopen account lifecycle
+- [x] Reports & Analytics Dashboard
+- [x] Export to PDF/Excel
 
-## What's Been Implemented (March 14, 2026)
+## Architecture (Post-Refactoring)
+```
+/app/backend/
+  server.py          - Main app, CORS, startup, router registration
+  config.py          - Settings, DB connection, collections
+  auth.py            - JWT, password hashing, token verification, permissions
+  models.py          - Pydantic models for all entities
+  utils.py           - serialize_doc, get_next_account_number
+  services/
+    financial.py     - Interest calc, payment processing, ledger generation
+  routes/
+    auth_routes.py   - Login, /me endpoints
+    users.py         - User CRUD, permissions, status toggle
+    dashboard.py     - Summary, stats
+    accounts.py      - Account CRUD, close/reopen, landed/received, ledger, villages
+    reports.py       - Village summary, monthly trend, rate distribution, top borrowers
+    export.py        - Excel and PDF exports
+  scripts/
+    seed.py          - Data seeding script
+```
 
-### Backend Features
-- FastAPI server with MongoDB integration
-- JWT authentication with 24-hour token expiry
-- Auto-increment account numbers (ACC000001 format)
-- Interest calculation logic (monthly rate)
-- Payment processing with automatic interest/principal distribution
-- Ledger entry creation for all financial transactions
-- User management with permissions
-- Dashboard summary calculations
+## Key Business Logic
+1. **Interest Formula**: Interest = (Principal x Rate x Days) / (100 x 30)
+2. **Payment Distribution**: Interest paid first, remainder to principal (FIFO oldest first)
+3. **Payment Date Rule**: Payment only affects landed entries that existed on or before the payment date
+4. **Carry-Forward**: If payment < interest, remaining interest is carried forward proportionally
+5. **Ledger**: All entries generated in chronological order for correct running balance
 
-### Bug Fixes (March 14-15, 2026)
-- Fixed: Ledger entries now use actual transaction date instead of current date
-- Fixed: Edit form preserves existing entry data (remaining_principal, accumulated_interest, etc.)
-- Fixed: Null value handling in interest calculations for legacy accounts
-- Fixed: Account totals calculation handles missing or null values gracefully
-- Fixed: Payment processing correctly distributes between interest (first) and principal
-- Fixed: Ledger regenerated on account update to reflect correct payment distribution
-- Fixed: Add received entry endpoint passes correct date to ledger entry
-
-### Major Interest Calculation Refactor (March 15, 2026)
-- **Interest Formula**: Interest = (Principal × Rate × Days) / (100 × 30)
-- **Payment Distribution Logic**:
-  - Case 1 (Payment >= Interest): Pay all interest, remaining reduces principal (FIFO - oldest first)
-  - Case 2 (Payment < Interest): Pay partial interest, **carry forward remaining** (no longer resets to 0)
-- **New Landed Entry Table Columns**: Interest Start From, Days, Calculated Interest, Carried Forward, Total Interest
-- **New Ledger Columns**: Remaining Interest, Remaining Principal
-- **Interest Start Date Logic**: Updates to last payment date after receiving payment
-
-### Frontend Features
-- Professional login page with split design
-- Dashboard with summary cards and statistics
-- Accounts listing with filters, sorting, pagination
-- Account detail page with 5 tabs (Overview, Jewellery, Landed, Received, Ledger)
-- Account create/edit forms with dynamic rows
-- User management with CRUD operations
-- Permissions modal for granular access control
-- Responsive sidebar navigation
-
-### Key Business Logic
-1. **Interest Calculation**: Monthly rate applied from last calculation date
-2. **Payment Distribution**: Interest paid first, remainder to principal
-3. **Ledger Tracking**: All financial movements recorded automatically
-4. **Closed Account Protection**: Only users with special permission can modify
+## Default Credentials
+- **Admin**: admin / admin123
+- **Operator**: operator1 / operator123
+- **Viewer**: viewer1 / viewer123
 
 ## Prioritized Backlog
 
@@ -83,14 +73,18 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - [x] Core account management
 - [x] Interest calculation engine
 - [x] Ledger system
+- [x] Payment date bug fix (future landed entries not affected)
+- [x] Chronological ledger generation
 
-### P1 (High Priority) - Future
-- [ ] Reports and analytics dashboard
-- [ ] Export to PDF/Excel
-- [ ] Interest history tracking
-- [ ] Account renewal workflow
+### P1 (High Priority) - DONE
+- [x] Reports and analytics dashboard (4 charts + tables)
+- [x] Export to PDF/Excel (accounts list + individual account)
+- [x] Backend refactoring (modular structure)
+- [x] Data seeding script
 
 ### P2 (Medium Priority) - Future
+- [ ] Interest history tracking
+- [ ] Account renewal workflow
 - [ ] Bulk import/export
 - [ ] Mobile-responsive improvements
 - [ ] Dark mode support
@@ -101,13 +95,3 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - [ ] Backup and restore
 - [ ] Multi-language support
 - [ ] Audit logs viewer
-
-## Default Credentials
-- **Username**: admin
-- **Password**: admin123
-
-## Next Tasks
-1. Add reports module with charts
-2. Implement export functionality
-3. Add account renewal workflow
-4. Interest history tracking
