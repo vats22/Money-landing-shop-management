@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { Button } from '../components/ui/Button';
@@ -6,8 +6,12 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
+import { Modal } from '../components/ui/Modal';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Trash2, Gem, TrendingUp, TrendingDown, Save } from 'lucide-react';
+import {
+  ArrowLeft, Plus, Trash2, Gem, TrendingUp, TrendingDown, Save,
+  Image as ImageIcon, Upload, Camera, X, ChevronLeft, ChevronRight
+} from 'lucide-react';
 
 // Get today's date for max date
 const getToday = () => new Date().toISOString().split('T')[0];
@@ -31,6 +35,17 @@ export default function AccountFormPage() {
     received_entries: []
   });
 
+  // Image modal state
+  const MAX_IMAGES = 5;
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedItemIndex, setSelectedItemIndex] = useState(-1);
+  const [selectedItemImages, setSelectedItemImages] = useState([]);
+  const [selectedItemName, setSelectedItemName] = useState('');
+  const [currentImageIdx, setCurrentImageIdx] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+
   useEffect(() => {
     if (isEdit) {
       fetchAccount();
@@ -49,8 +64,8 @@ export default function AccountFormPage() {
         status: account.status,
         details: account.details || '',
         jewellery_items: account.jewellery_items?.length > 0 
-          ? account.jewellery_items 
-          : [{ name: '', weight: '' }],
+          ? account.jewellery_items.map(item => ({ ...item, images: item.images || [] }))
+          : [{ name: '', weight: '', images: [] }],
         landed_entries: account.landed_entries?.length > 0 
           ? account.landed_entries 
           : [{ date: '', amount: '', interest_rate: '2' }],
@@ -141,6 +156,80 @@ export default function AccountFormPage() {
     }));
   };
 
+  // Image handling functions
+  const openImageModal = (item, index) => {
+    setSelectedItemIndex(index);
+    setSelectedItemImages(item.images || []);
+    setSelectedItemName(item.name || `Item ${index + 1}`);
+    setCurrentImageIdx(0);
+    setShowImageModal(true);
+  };
+
+  const getImageUrl = (image) => {
+    const token = localStorage.getItem('token');
+    return `${process.env.REACT_APP_BACKEND_URL}/api/files/${image.storage_path}?auth=${token}`;
+  };
+
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const currentImages = formData.jewellery_items[selectedItemIndex]?.images || [];
+    const remaining = MAX_IMAGES - currentImages.length;
+    if (remaining <= 0) { toast.error('Maximum 5 images per item'); return; }
+
+    const filesToUpload = files.slice(0, remaining);
+    setUploading(true);
+
+    for (const file of filesToUpload) {
+      if (file.size > 10 * 1024 * 1024) { toast.error(`${file.name}: Too large (max 10MB)`); continue; }
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        await api.post(`/api/accounts/${id}/jewellery/${selectedItemIndex}/images`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } catch (error) {
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    setUploading(false);
+    toast.success('Images uploaded');
+    // Refresh account data to get updated images
+    const refreshed = await api.get(`/api/accounts/${id}`);
+    const updatedItems = refreshed.data.jewellery_items || [];
+    setFormData(prev => ({
+      ...prev,
+      jewellery_items: prev.jewellery_items.map((item, i) => ({
+        ...item,
+        images: updatedItems[i]?.images || item.images || []
+      }))
+    }));
+    const updatedItem = updatedItems[selectedItemIndex];
+    setSelectedItemImages(updatedItem?.images || []);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleDeleteImage = async (imageId) => {
+    try {
+      await api.delete(`/api/accounts/${id}/jewellery/${selectedItemIndex}/images/${imageId}`);
+      toast.success('Image deleted');
+      const refreshed = await api.get(`/api/accounts/${id}`);
+      const updatedItems = refreshed.data.jewellery_items || [];
+      setFormData(prev => ({
+        ...prev,
+        jewellery_items: prev.jewellery_items.map((item, i) => ({
+          ...item,
+          images: updatedItems[i]?.images || item.images || []
+        }))
+      }));
+      const newImages = updatedItems[selectedItemIndex]?.images || [];
+      setSelectedItemImages(newImages);
+      if (currentImageIdx >= newImages.length) setCurrentImageIdx(Math.max(0, newImages.length - 1));
+    } catch { toast.error('Failed to delete image'); }
+  };
+
   const validateForm = () => {
     if (!formData.name || !formData.name.trim()) {
       toast.error('Name is required');
@@ -185,7 +274,7 @@ export default function AccountFormPage() {
       // Filter out empty entries and prepare payload
       const jewellery_items = formData.jewellery_items
         .filter(item => item.name && item.name.trim() && parseFloat(item.weight) > 0)
-        .map(item => ({ name: item.name, weight: parseFloat(item.weight) }));
+        .map(item => ({ name: item.name, weight: parseFloat(item.weight), images: item.images || [] }));
       
       const landed_entries = formData.landed_entries
         .filter(entry => entry.date && parseFloat(entry.amount) > 0)
@@ -393,6 +482,23 @@ export default function AccountFormPage() {
                       placeholder="10.5"
                     />
                   </div>
+                  {/* Image upload button - only in edit mode */}
+                  {isEdit && (
+                    <div className="w-24">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">
+                        Images
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => openImageModal(item, index)}
+                        data-testid={`jewellery-images-${index}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200 w-full justify-center"
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" />
+                        {item.images?.length || 0} / {MAX_IMAGES}
+                      </button>
+                    </div>
+                  )}
                   {formData.jewellery_items.length > 1 && (
                     <button
                       type="button"
@@ -404,6 +510,11 @@ export default function AccountFormPage() {
                   )}
                 </div>
               ))}
+              {!isEdit && (
+                <p className="text-xs text-slate-400 italic mt-2">
+                  Images can be uploaded after saving the account.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -564,6 +675,107 @@ export default function AccountFormPage() {
           </Button>
         </div>
       </form>
+
+      {/* Image Viewer/Upload Modal */}
+      {isEdit && (
+        <Modal isOpen={showImageModal} onClose={() => setShowImageModal(false)} title={`Images - ${selectedItemName}`} size="lg">
+          <div className="space-y-4">
+            {selectedItemImages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                <ImageIcon className="h-12 w-12 mb-3" />
+                <p className="text-sm font-medium">No images uploaded yet</p>
+                <p className="text-xs mt-1">Upload up to {MAX_IMAGES} images per jewellery item</p>
+              </div>
+            ) : (
+              <div>
+                {/* Main image display */}
+                <div className="relative bg-slate-100 rounded-xl overflow-hidden" style={{ minHeight: '350px' }}>
+                  <img
+                    src={getImageUrl(selectedItemImages[currentImageIdx])}
+                    alt={`${selectedItemName} - ${currentImageIdx + 1}`}
+                    className="w-full h-[350px] object-contain"
+                    data-testid="form-main-image"
+                  />
+                  {selectedItemImages.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentImageIdx(i => (i - 1 + selectedItemImages.length) % selectedItemImages.length)}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentImageIdx(i => (i + 1) % selectedItemImages.length)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </>
+                  )}
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-black/60 rounded-full text-white text-xs font-medium">
+                    {currentImageIdx + 1} / {selectedItemImages.length}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteImage(selectedItemImages[currentImageIdx].id)}
+                    className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-600 rounded-full text-white transition-colors"
+                    title="Delete image"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                {/* Thumbnails */}
+                <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
+                  {selectedItemImages.map((img, i) => (
+                    <button key={img.id} type="button" onClick={() => setCurrentImageIdx(i)}
+                      className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                        i === currentImageIdx ? 'border-emerald-500' : 'border-transparent hover:border-slate-300'
+                      }`}
+                    >
+                      <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload Section */}
+            {selectedItemImages.length < MAX_IMAGES && (
+              <div className="border-t border-slate-200 pt-4">
+                <p className="text-xs text-slate-500 mb-3">
+                  {MAX_IMAGES - selectedItemImages.length} more image(s) can be added
+                </p>
+                <div className="flex gap-2">
+                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
+                  <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageUpload} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    data-testid="form-upload-device-btn"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {uploading ? 'Uploading...' : 'Choose from Device'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={uploading}
+                    data-testid="form-upload-camera-btn"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    <Camera className="h-4 w-4" />
+                    Camera
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
