@@ -74,6 +74,17 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - [x] Closed accounts cannot be edited/deleted (must reopen first)
 - [x] Dashboard separates active vs closed account totals
 
+### Image Management (Session 3 - Bug Fixes)
+- [x] Jewellery image upload in Edit Account form (up to 5 per item)
+- [x] Live camera capture via getUserMedia API in edit form
+- [x] Account Detail page jewellery tab - view-only image modal (no upload/delete)
+- [x] Image viewer with navigation, thumbnails, delete in edit form
+- [x] New account form shows "save first" note for images
+
+### Account History (Session 2)
+- [x] History tab on Account Detail page for close/reopen events
+- [x] Close/reopen event logging with date, user, reason/remarks
+
 ## Prioritized Backlog
 
 ### P2 (Medium Priority) - Next
