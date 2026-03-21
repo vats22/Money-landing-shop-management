@@ -10,7 +10,7 @@ from datetime import datetime, date
 from typing import Optional, Dict, Any
 
 class BusinessLogicTester:
-    def __init__(self, base_url: str = "https://pawn-mgmt.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://lending-vault.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.token = None
         self.tests_run = 0
