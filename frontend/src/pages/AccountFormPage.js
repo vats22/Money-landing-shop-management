@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { Button } from '../components/ui/Button';
@@ -6,11 +6,14 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
-import { Modal } from '../components/ui/Modal';
+import { Modal, ConfirmDialog } from '../components/ui/Modal';
 import { toast } from 'sonner';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+import DOMPurify from 'dompurify';
 import {
   ArrowLeft, Plus, Trash2, Gem, TrendingUp, TrendingDown, Save,
-  Image as ImageIcon, Upload, Camera, X, ChevronLeft, ChevronRight
+  Image as ImageIcon, Upload, Camera, X, ChevronLeft, ChevronRight, FileText
 } from 'lucide-react';
 
 // Get today's date for max date
@@ -23,6 +26,32 @@ export default function AccountFormPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const today = getToday();
+
+  // Rich text editor config
+  const quillModules = {
+    toolbar: [
+      ['bold', 'italic', 'underline'],
+      [{ list: 'ordered' }, { list: 'bullet' }],
+      [{ align: '' }, { align: 'center' }, { align: 'right' }],
+      ['clean']
+    ]
+  };
+  const quillFormats = ['bold', 'italic', 'underline', 'list', 'align'];
+
+  // Numeric-only input handler (digits + single dot)
+  const handleNumericInput = useCallback((setter, field, index) => (e) => {
+    const val = e.target.value;
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setter(index, field, val);
+    }
+  }, []);
+
+  // Confirmation dialog state
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [pendingSubmitEvent, setPendingSubmitEvent] = useState(null);
+
+  // Account info for edit page header
+  const [accountInfo, setAccountInfo] = useState(null);
 
   const [formData, setFormData] = useState({
     opening_date: today,
@@ -62,6 +91,7 @@ export default function AccountFormPage() {
     try {
       const response = await api.get(`/api/accounts/${id}`);
       const account = response.data;
+      setAccountInfo({ account_number: account.account_number, name: account.name });
       setFormData({
         opening_date: account.opening_date,
         name: account.name,
@@ -332,7 +362,13 @@ export default function AccountFormPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
+    setPendingSubmitEvent(true);
+    setShowSaveConfirm(true);
+  };
 
+  const handleConfirmedSave = async () => {
+    setShowSaveConfirm(false);
+    setPendingSubmitEvent(null);
     setSaving(true);
     try {
       // Filter out empty entries and prepare payload
@@ -346,7 +382,6 @@ export default function AccountFormPage() {
           date: entry.date,
           amount: parseFloat(entry.amount),
           interest_rate: parseFloat(entry.interest_rate) || 2,
-          // Preserve existing calculated fields during edit
           remaining_principal: entry.remaining_principal !== undefined ? parseFloat(entry.remaining_principal) : parseFloat(entry.amount),
           last_interest_calc_date: entry.last_interest_calc_date || entry.date,
           accumulated_interest: entry.accumulated_interest !== undefined ? parseFloat(entry.accumulated_interest) : 0
@@ -357,17 +392,19 @@ export default function AccountFormPage() {
         .map(entry => ({
           date: entry.date,
           amount: parseFloat(entry.amount),
-          // Preserve existing calculated fields during edit
           principal_paid: entry.principal_paid !== undefined ? parseFloat(entry.principal_paid) : 0,
           interest_paid: entry.interest_paid !== undefined ? parseFloat(entry.interest_paid) : 0
         }));
+
+      // Sanitize HTML details
+      const sanitizedDetails = DOMPurify.sanitize(formData.details);
 
       const payload = {
         opening_date: formData.opening_date,
         name: formData.name,
         village: formData.village,
         status: formData.status,
-        details: formData.details,
+        details: sanitizedDetails,
         jewellery_items,
         landed_entries,
         received_entries
@@ -412,9 +449,19 @@ export default function AccountFormPage() {
           <h1 className="text-2xl font-bold font-display text-slate-900">
             {isEdit ? 'Edit Account' : 'New Account'}
           </h1>
-          <p className="text-slate-500 mt-1">
-            {isEdit ? 'Update account details' : 'Create a new lending account'}
-          </p>
+          {isEdit && accountInfo ? (
+            <div className="flex items-center gap-3 mt-1">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-sm font-medium rounded-lg border border-emerald-200" data-testid="edit-account-number">
+                <FileText className="h-3.5 w-3.5" />
+                {accountInfo.account_number}
+              </span>
+              <span className="text-sm text-slate-600" data-testid="edit-account-name">{accountInfo.name}</span>
+            </div>
+          ) : (
+            <p className="text-slate-500 mt-1">
+              {isEdit ? 'Update account details' : 'Create a new lending account'}
+            </p>
+          )}
         </div>
       </div>
 
@@ -488,15 +535,16 @@ export default function AccountFormPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Notes / Details
                 </label>
-                <textarea
-                  data-testid="details-input"
-                  name="details"
-                  value={formData.details}
-                  onChange={handleChange}
-                  rows={3}
-                  className="flex w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                  placeholder="Any additional notes..."
-                />
+                <div className="quill-wrapper" data-testid="details-editor">
+                  <ReactQuill
+                    theme="snow"
+                    value={formData.details}
+                    onChange={(val) => setFormData(prev => ({ ...prev, details: val }))}
+                    modules={quillModules}
+                    formats={quillFormats}
+                    placeholder="Any additional notes..."
+                  />
+                </div>
               </div>
             </div>
           </CardContent>
@@ -538,11 +586,10 @@ export default function AccountFormPage() {
                     </label>
                     <Input
                       data-testid={`jewellery-weight-${index}`}
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       value={item.weight}
-                      onChange={(e) => updateJewelleryItem(index, 'weight', e.target.value)}
+                      onChange={handleNumericInput(updateJewelleryItem, 'weight', index)}
                       placeholder="10.5"
                     />
                   </div>
@@ -620,11 +667,10 @@ export default function AccountFormPage() {
                     </label>
                     <Input
                       data-testid={`landed-amount-${index}`}
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       value={entry.amount}
-                      onChange={(e) => updateLandedEntry(index, 'amount', e.target.value)}
+                      onChange={handleNumericInput(updateLandedEntry, 'amount', index)}
                       placeholder="10000"
                     />
                   </div>
@@ -634,11 +680,10 @@ export default function AccountFormPage() {
                     </label>
                     <Input
                       data-testid={`landed-interest-${index}`}
-                      type="number"
-                      step="0.1"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       value={entry.interest_rate}
-                      onChange={(e) => updateLandedEntry(index, 'interest_rate', e.target.value)}
+                      onChange={handleNumericInput(updateLandedEntry, 'interest_rate', index)}
                       placeholder="2"
                     />
                   </div>
@@ -699,11 +744,10 @@ export default function AccountFormPage() {
                       </label>
                       <Input
                         data-testid={`received-amount-${index}`}
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={entry.amount}
-                        onChange={(e) => updateReceivedEntry(index, 'amount', e.target.value)}
+                        onChange={handleNumericInput(updateReceivedEntry, 'amount', index)}
                         placeholder="5000"
                       />
                     </div>
@@ -879,6 +923,25 @@ export default function AccountFormPage() {
           </div>
         </Modal>
       )}
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showSaveConfirm}
+        onClose={() => { setShowSaveConfirm(false); setPendingSubmitEvent(null); }}
+        onConfirm={handleConfirmedSave}
+        title={isEdit ? 'Confirm Update' : 'Confirm Create'}
+        message={isEdit ? 'Are you sure you want to update this entry?' : 'Are you sure you want to create this entry?'}
+        confirmText={isEdit ? 'Yes, Update' : 'Yes, Create'}
+        variant="warning"
+      />
+
+      {/* Quill Editor Styles */}
+      <style>{`
+        .quill-wrapper .ql-container { min-height: 100px; border-radius: 0 0 0.5rem 0.5rem; border-color: #cbd5e1; font-size: 0.875rem; }
+        .quill-wrapper .ql-toolbar { border-radius: 0.5rem 0.5rem 0 0; border-color: #cbd5e1; background: #f8fafc; }
+        .quill-wrapper .ql-editor { min-height: 100px; }
+        .quill-wrapper .ql-container:focus-within { border-color: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.2); }
+      `}</style>
     </div>
   );
 }

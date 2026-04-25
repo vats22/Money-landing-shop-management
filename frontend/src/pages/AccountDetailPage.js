@@ -9,11 +9,12 @@ import { StatusBadge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Modal, ConfirmDialog } from '../components/ui/Modal';
 import { toast } from 'sonner';
+import DOMPurify from 'dompurify';
 import {
   ArrowLeft, Pencil, Gem, Wallet, TrendingUp, TrendingDown,
   Calendar, MapPin, User, FileText, BookOpen, Lock, Unlock,
   AlertCircle, Download, FileSpreadsheet, Image as ImageIcon,
-  X, ChevronLeft, ChevronRight, Clock
+  X, ChevronLeft, ChevronRight, Clock, ZoomIn, ZoomOut, Maximize2
 } from 'lucide-react';
 
 const getToday = () => new Date().toISOString().split('T')[0];
@@ -39,6 +40,10 @@ export default function AccountDetailPage() {
   const [selectedItemName, setSelectedItemName] = useState('');
   const [selectedItemIndex, setSelectedItemIndex] = useState(-1);
   const [currentImageIdx, setCurrentImageIdx] = useState(0);
+
+  // Image zoom state
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [showFullscreen, setShowFullscreen] = useState(false);
 
   useEffect(() => { fetchAccountData(); }, [id]);
 
@@ -269,7 +274,7 @@ export default function AccountDetailPage() {
               {account.details && (
                 <div className="mt-6 p-4 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Details / Notes</p>
-                  <p className="text-sm text-slate-700">{account.details}</p>
+                  <div className="text-sm text-slate-700 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(account.details) }} />
                 </div>
               )}
             </CardContent>
@@ -557,8 +562,8 @@ export default function AccountDetailPage() {
         </div>
       </Modal>
 
-      {/* Image Viewer Modal (View Only) */}
-      <Modal isOpen={showImageModal} onClose={() => setShowImageModal(false)} title={`Images - ${selectedItemName}`} size="lg">
+      {/* Image Viewer Modal (View Only) with Zoom */}
+      <Modal isOpen={showImageModal} onClose={() => { setShowImageModal(false); setZoomLevel(1); }} title={`Images - ${selectedItemName}`} size="lg">
         <div className="space-y-4">
           {selectedItemImages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-slate-400">
@@ -568,24 +573,27 @@ export default function AccountDetailPage() {
             </div>
           ) : (
             <div>
-              {/* Main image display */}
-              <div className="relative bg-slate-100 rounded-xl overflow-hidden" style={{ minHeight: '350px' }}>
+              {/* Main image display with zoom */}
+              <div className="relative bg-slate-100 rounded-xl overflow-hidden cursor-zoom-in" style={{ minHeight: '350px' }}
+                onClick={() => setShowFullscreen(true)}
+              >
                 <img
                   src={getImageUrl(selectedItemImages[currentImageIdx])}
                   alt={`${selectedItemName} - ${currentImageIdx + 1}`}
-                  className="w-full h-[350px] object-contain"
+                  className="w-full h-[350px] object-contain transition-transform duration-200"
+                  style={{ transform: `scale(${zoomLevel})` }}
                   data-testid="main-image"
                 />
                 {selectedItemImages.length > 1 && (
                   <>
                     <button
-                      onClick={() => setCurrentImageIdx(i => (i - 1 + selectedItemImages.length) % selectedItemImages.length)}
+                      onClick={(e) => { e.stopPropagation(); setCurrentImageIdx(i => (i - 1 + selectedItemImages.length) % selectedItemImages.length); setZoomLevel(1); }}
                       className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
                     >
                       <ChevronLeft className="h-5 w-5" />
                     </button>
                     <button
-                      onClick={() => setCurrentImageIdx(i => (i + 1) % selectedItemImages.length)}
+                      onClick={(e) => { e.stopPropagation(); setCurrentImageIdx(i => (i + 1) % selectedItemImages.length); setZoomLevel(1); }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
                     >
                       <ChevronRight className="h-5 w-5" />
@@ -596,10 +604,26 @@ export default function AccountDetailPage() {
                   {currentImageIdx + 1} / {selectedItemImages.length}
                 </div>
               </div>
+              {/* Zoom Controls */}
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.25))} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" data-testid="zoom-out-btn" title="Zoom Out">
+                  <ZoomOut className="h-4 w-4 text-slate-600" />
+                </button>
+                <span className="text-xs text-slate-500 w-12 text-center">{Math.round(zoomLevel * 100)}%</span>
+                <button onClick={() => setZoomLevel(z => Math.min(3, z + 0.25))} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" data-testid="zoom-in-btn" title="Zoom In">
+                  <ZoomIn className="h-4 w-4 text-slate-600" />
+                </button>
+                <button onClick={() => setZoomLevel(1)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-xs text-slate-600" title="Reset Zoom">
+                  Reset
+                </button>
+                <button onClick={() => setShowFullscreen(true)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" data-testid="fullscreen-btn" title="Fullscreen">
+                  <Maximize2 className="h-4 w-4 text-slate-600" />
+                </button>
+              </div>
               {/* Thumbnails */}
               <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
                 {selectedItemImages.map((img, i) => (
-                  <button key={img.id} onClick={() => setCurrentImageIdx(i)}
+                  <button key={img.id} onClick={() => { setCurrentImageIdx(i); setZoomLevel(1); }}
                     className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
                       i === currentImageIdx ? 'border-emerald-500' : 'border-transparent hover:border-slate-300'
                     }`}
@@ -612,6 +636,36 @@ export default function AccountDetailPage() {
           )}
         </div>
       </Modal>
+
+      {/* Fullscreen Image Modal */}
+      {showFullscreen && selectedItemImages.length > 0 && (
+        <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center" onClick={() => setShowFullscreen(false)}>
+          <button onClick={() => setShowFullscreen(false)} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full text-white z-10" data-testid="close-fullscreen-btn">
+            <X className="h-6 w-6" />
+          </button>
+          {selectedItemImages.length > 1 && (
+            <>
+              <button onClick={(e) => { e.stopPropagation(); setCurrentImageIdx(i => (i - 1 + selectedItemImages.length) % selectedItemImages.length); }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/20 hover:bg-white/30 rounded-full text-white z-10">
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); setCurrentImageIdx(i => (i + 1) % selectedItemImages.length); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/20 hover:bg-white/30 rounded-full text-white z-10">
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </>
+          )}
+          <img
+            src={getImageUrl(selectedItemImages[currentImageIdx])}
+            alt={`${selectedItemName} fullscreen`}
+            className="max-w-[90vw] max-h-[90vh] object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-white/20 rounded-full text-white text-sm">
+            {currentImageIdx + 1} / {selectedItemImages.length}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

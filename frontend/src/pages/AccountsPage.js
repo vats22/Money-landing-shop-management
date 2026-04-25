@@ -18,12 +18,26 @@ import {
   Eye, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Download
 } from 'lucide-react';
 
+const FILTER_STORAGE_KEY = 'lendledger_accounts_filters';
+
 const getDefaultStartDate = () => {
   const date = new Date();
-  date.setDate(date.getDate() - 30);
+  date.setDate(date.getDate() - 90);
   return date.toISOString().split('T')[0];
 };
 const getToday = () => new Date().toISOString().split('T')[0];
+
+const loadFilters = () => {
+  try {
+    const saved = localStorage.getItem(FILTER_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return null;
+};
+
+const saveFilters = (filters) => {
+  try { localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters)); } catch {}
+};
 
 export default function AccountsPage() {
   const navigate = useNavigate();
@@ -32,11 +46,12 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true);
   const [villages, setVillages] = useState([]);
 
-  const [search, setSearch] = useState('');
-  const [villageFilter, setVillageFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [startDate, setStartDate] = useState(getDefaultStartDate());
-  const [endDate, setEndDate] = useState(getToday());
+  const savedFilters = loadFilters();
+  const [search, setSearch] = useState(savedFilters?.search || '');
+  const [villageFilter, setVillageFilter] = useState(savedFilters?.villageFilter || '');
+  const [statusFilter, setStatusFilter] = useState(savedFilters?.statusFilter || '');
+  const [startDate, setStartDate] = useState(savedFilters?.startDate || getDefaultStartDate());
+  const [endDate, setEndDate] = useState(savedFilters?.endDate || getToday());
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -88,7 +103,11 @@ export default function AccountsPage() {
     }
   };
 
-  const handleSearch = () => { setPage(1); fetchAccounts(); };
+  const handleSearch = () => {
+    saveFilters({ search, villageFilter, statusFilter, startDate, endDate });
+    setPage(1);
+    fetchAccounts();
+  };
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -115,6 +134,7 @@ export default function AccountsPage() {
     setSearch(''); setVillageFilter(''); setStatusFilter('');
     setStartDate(getDefaultStartDate()); setEndDate(getToday());
     setPage(1);
+    localStorage.removeItem(FILTER_STORAGE_KEY);
     setTimeout(() => fetchAccounts(), 0);
   };
 
@@ -237,6 +257,8 @@ export default function AccountsPage() {
                 <option value="">All Status</option>
                 <option value="continue">Continue</option>
                 <option value="closed">Closed</option>
+                <option value="renewed">Renewed</option>
+                <option value="immediate action needed">Immediate Action Needed</option>
               </Select>
             </div>
             {/* Date range picker */}
