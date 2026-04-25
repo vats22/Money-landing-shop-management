@@ -201,7 +201,7 @@ export default function AccountDetailPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className="border-l-4 border-l-emerald-500">
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wide">Total Landed</p>
@@ -224,6 +224,12 @@ export default function AccountDetailPage() {
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase tracking-wide">Pending Interest</p>
             <p className="text-lg font-bold font-mono text-red-600 mt-1 tabular-nums">{formatCurrency(account.total_pending_interest)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-purple-500" data-testid="total-pending-card">
+          <CardContent className="p-4">
+            <p className="text-xs text-slate-500 uppercase tracking-wide">Total Pending</p>
+            <p className="text-lg font-bold font-mono text-purple-700 mt-1 tabular-nums">{formatCurrency((account.total_pending_amount || 0) + (account.total_pending_interest || 0))}</p>
           </CardContent>
         </Card>
       </div>

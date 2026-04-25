@@ -33,10 +33,12 @@ export default function AccountFormPage() {
       ['bold', 'italic', 'underline'],
       [{ list: 'ordered' }, { list: 'bullet' }],
       [{ align: '' }, { align: 'center' }, { align: 'right' }],
+      [{ color: [] }, { background: [] }],
       ['clean']
-    ]
+    ],
+    history: { delay: 500, maxStack: 100, userOnly: true }
   };
-  const quillFormats = ['bold', 'italic', 'underline', 'list', 'align'];
+  const quillFormats = ['bold', 'italic', 'underline', 'list', 'align', 'color', 'background'];
 
   // Numeric-only input handler (digits + single dot)
   const handleNumericInput = useCallback((setter, field, index) => (e) => {
@@ -52,6 +54,9 @@ export default function AccountFormPage() {
 
   // Account info for edit page header
   const [accountInfo, setAccountInfo] = useState(null);
+
+  // Delete entry confirmation
+  const [deleteEntryConfirm, setDeleteEntryConfirm] = useState(null);
 
   const [formData, setFormData] = useState({
     opening_date: today,
@@ -613,7 +618,7 @@ export default function AccountFormPage() {
                   {formData.jewellery_items.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeJewelleryItem(index)}
+                      onClick={() => setDeleteEntryConfirm({ type: 'jewellery', index })}
                       className="mt-6 p-2 hover:bg-red-100 rounded-lg transition-colors"
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
@@ -690,7 +695,7 @@ export default function AccountFormPage() {
                   {formData.landed_entries.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeLandedEntry(index)}
+                      onClick={() => setDeleteEntryConfirm({ type: 'landed', index })}
                       className="mt-6 p-2 hover:bg-red-100 rounded-lg transition-colors"
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
@@ -753,7 +758,7 @@ export default function AccountFormPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => removeReceivedEntry(index)}
+                      onClick={() => setDeleteEntryConfirm({ type: 'received', index })}
                       className="mt-6 p-2 hover:bg-red-100 rounded-lg transition-colors"
                     >
                       <Trash2 className="h-4 w-4 text-red-500" />
@@ -923,6 +928,25 @@ export default function AccountFormPage() {
           </div>
         </Modal>
       )}
+
+      {/* Delete Entry Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteEntryConfirm}
+        onClose={() => setDeleteEntryConfirm(null)}
+        onConfirm={() => {
+          if (deleteEntryConfirm) {
+            const { type, index } = deleteEntryConfirm;
+            if (type === 'jewellery') removeJewelleryItem(index);
+            else if (type === 'landed') removeLandedEntry(index);
+            else if (type === 'received') removeReceivedEntry(index);
+          }
+          setDeleteEntryConfirm(null);
+        }}
+        title="Delete Entry"
+        message="Are you sure you want to delete this entry?"
+        confirmText="Yes, Delete"
+        variant="danger"
+      />
 
       {/* Confirmation Dialog */}
       <ConfirmDialog

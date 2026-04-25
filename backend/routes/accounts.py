@@ -37,7 +37,11 @@ async def get_accounts(
             {"account_number": {"$regex": search, "$options": "i"}}
         ]
     if village:
-        query["village"] = {"$regex": village, "$options": "i"}
+        villages = [v.strip() for v in village.split(',') if v.strip()]
+        if len(villages) == 1:
+            query["village"] = {"$regex": villages[0], "$options": "i"}
+        elif len(villages) > 1:
+            query["village"] = {"$in": [v for v in villages]}
     if status:
         query["status"] = status
     if start_date and end_date:

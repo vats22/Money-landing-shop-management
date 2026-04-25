@@ -11,7 +11,7 @@ import { StatusBadge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { ConfirmDialog } from '../components/ui/Modal';
 import { DateRangePicker } from '../components/ui/DateRangePicker';
-import { SearchableDropdown } from '../components/ui/SearchableDropdown';
+import { MultiSelectDropdown } from '../components/ui/MultiSelectDropdown';
 import { toast } from 'sonner';
 import {
   Plus, Search, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
@@ -48,7 +48,7 @@ export default function AccountsPage() {
 
   const savedFilters = loadFilters();
   const [search, setSearch] = useState(savedFilters?.search || '');
-  const [villageFilter, setVillageFilter] = useState(savedFilters?.villageFilter || '');
+  const [villageFilter, setVillageFilter] = useState(savedFilters?.villageFilter || []);
   const [statusFilter, setStatusFilter] = useState(savedFilters?.statusFilter || '');
   const [startDate, setStartDate] = useState(savedFilters?.startDate || getDefaultStartDate());
   const [endDate, setEndDate] = useState(savedFilters?.endDate || getToday());
@@ -56,7 +56,7 @@ export default function AccountsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [limit] = useState(20);
+  const [limit, setLimit] = useState(10);
   const [sortBy, setSortBy] = useState('account_number');
   const [sortOrder, setSortOrder] = useState('desc');
   const [deleteId, setDeleteId] = useState(null);
@@ -69,7 +69,7 @@ export default function AccountsPage() {
   useEffect(() => {
     fetchAccounts();
     fetchVillages();
-  }, [page, sortBy, sortOrder]);
+  }, [page, sortBy, sortOrder, limit]);
 
   const fetchAccounts = async () => {
     setLoading(true);
@@ -79,7 +79,7 @@ export default function AccountsPage() {
         sort_by: sortBy, sort_order: sortOrder,
       });
       if (search) params.append('search', search);
-      if (villageFilter) params.append('village', villageFilter);
+      if (villageFilter.length > 0) params.append('village', villageFilter.join(','));
       if (statusFilter) params.append('status', statusFilter);
       if (startDate) params.append('start_date', startDate);
       if (endDate) params.append('end_date', endDate);
@@ -131,7 +131,7 @@ export default function AccountsPage() {
   };
 
   const clearFilters = () => {
-    setSearch(''); setVillageFilter(''); setStatusFilter('');
+    setSearch(''); setVillageFilter([]); setStatusFilter('');
     setStartDate(getDefaultStartDate()); setEndDate(getToday());
     setPage(1);
     localStorage.removeItem(FILTER_STORAGE_KEY);
@@ -237,9 +237,9 @@ export default function AccountsPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
-            {/* Searchable village dropdown */}
-            <div className="w-40">
-              <SearchableDropdown
+            {/* Searchable village multi-select */}
+            <div className="w-48">
+              <MultiSelectDropdown
                 options={villages}
                 value={villageFilter}
                 onChange={setVillageFilter}
@@ -378,9 +378,22 @@ export default function AccountsPage() {
               {/* Pagination */}
               <div className="sticky bottom-0 bg-white border-t border-slate-200 px-4 py-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-slate-500">
-                    Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} accounts
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm text-slate-500">
+                      Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} accounts
+                    </p>
+                    <select
+                      value={limit}
+                      onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+                      data-testid="page-size-select"
+                      className="px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value={10}>10 / page</option>
+                      <option value={30}>30 / page</option>
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => setPage(1)} disabled={page === 1}>
                       <ChevronsLeft className="h-4 w-4" />
