@@ -108,6 +108,13 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - [x] Image gallery zoom (zoom in/out, reset, fullscreen overlay with navigation)
 - [x] Account Number & Name displayed at top of Edit page
 
+### 5 Feature Enhancements (Session 5)
+- [x] Multi-select village filter with search, chips/tags, removable selections (backend supports comma-separated)
+- [x] Rich text editor enhanced with text color picker + background color (highlight)
+- [x] Delete entry confirmation popup for landed/received/jewellery entries
+- [x] Total Pending Amount summary card (= Pending Principal + Pending Interest)
+- [x] Page size dropdown (10, 30, 50, 100 records per page)
+
 ## Prioritized Backlog
 
 ### P2 (Medium Priority) - Next
