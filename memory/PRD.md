@@ -96,6 +96,18 @@ Build a full-stack Jewellery & Money Lending Management Web Application with:
 - [x] Sidebar is now collapsible/toggleable on desktop (72px collapsed, 256px expanded)
 - [x] History tab properly interleaves close/reopen events by array index (chronological order)
 
+### 10 UI/UX Enhancements (Session 4)
+- [x] Rich Text Editor (Quill) for Details field with B/I/U, lists, alignment, XSS prevention via DOMPurify
+- [x] Filter state preserved in localStorage (persists across navigation)
+- [x] Default date range changed to 90 days
+- [x] Status dropdown now matches form options (Continue, Closed, Renewed, Immediate Action Needed)
+- [x] Weight input changed to text with numeric-only validation (digits + single dot)
+- [x] Amount & Interest inputs changed to text with same numeric validation
+- [x] Confirmation dialog before Add/Edit save ("Are you sure you want to create/update this entry?")
+- [x] Image upload in Edit form with camera capture (Add form shows "save first" note)
+- [x] Image gallery zoom (zoom in/out, reset, fullscreen overlay with navigation)
+- [x] Account Number & Name displayed at top of Edit page
+
 ## Prioritized Backlog
 
 ### P2 (Medium Priority) - Next
