@@ -388,6 +388,82 @@ async def get_account_ledger(account_id: str, current_user: dict = Depends(verif
     return serialize_doc(ledger_entries)
 
 
+@router.get("/ledger-enhanced/{account_id}")
+async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(verify_token)):
+    """Enhanced ledger with computed notes, interest charged, and proper balance"""
+    account = await accounts_collection.find_one({"account_number": account_id}) or \
+              await accounts_collection.find_one({"_id": ObjectId(account_id)})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    ledger_raw = await ledger_collection.find({"account_id": str(account["_id"])}).sort("transaction_date", 1).to_list(1000)
+    if not ledger_raw:
+        ledger_raw = await ledger_collection.find({"account_id": account_id}).sort("transaction_date", 1).to_list(1000)
+
+    entries = serialize_doc(ledger_raw)
+    enhanced = []
+    total_interest_charged = 0.0
+    total_interest_paid = 0.0
+
+    for i, entry in enumerate(entries):
+        e = {**entry}
+        txn_type = e.get("transaction_type", "")
+        amount = float(e.get("amount", 0))
+        interest_amt = float(e.get("interest_amount", 0))
+        principal_amt = float(e.get("principal_amount", 0))
+        rem_principal = float(e.get("remaining_principal", 0))
+        rem_interest = float(e.get("remaining_interest", 0))
+
+        # Compute balance = remaining principal + remaining interest
+        e["computed_balance"] = round(rem_principal + rem_interest, 2)
+
+        if txn_type == "LANDED":
+            e["interest_charged"] = 0
+            e["notes"] = "Loan disbursed" if i == 0 else "Additional loan added"
+        elif txn_type == "PAYMENT":
+            e["interest_charged"] = round(interest_amt + rem_interest, 2)
+            total_interest_charged += e["interest_charged"]
+            total_interest_paid += interest_amt
+
+            notes_parts = []
+            if interest_amt > 0 and principal_amt > 0:
+                notes_parts.append(f"Interest cleared: {_fmt_currency(interest_amt)}")
+                notes_parts.append(f"Principal paid: {_fmt_currency(principal_amt)}")
+            elif interest_amt > 0 and principal_amt == 0:
+                if rem_interest > 0:
+                    notes_parts.append(f"Partial interest paid, {_fmt_currency(rem_interest)} carried forward")
+                else:
+                    notes_parts.append(f"Interest paid: {_fmt_currency(interest_amt)}")
+            elif principal_amt > 0:
+                notes_parts.append(f"Principal reduced by {_fmt_currency(principal_amt)}")
+
+            e["notes"] = "; ".join(notes_parts) if notes_parts else "Payment received"
+        elif txn_type == "CLOSED":
+            e["interest_charged"] = 0
+            e["notes"] = "Account closed"
+        elif txn_type == "REOPENED":
+            e["interest_charged"] = 0
+            e["notes"] = "Account reopened"
+        else:
+            e["interest_charged"] = 0
+            e["notes"] = ""
+
+        enhanced.append(e)
+
+    # Summary
+    summary = {
+        "total_interest_charged": round(total_interest_charged, 2),
+        "total_interest_paid": round(total_interest_paid, 2),
+        "pending_interest": round(total_interest_charged - total_interest_paid, 2),
+    }
+
+    return {"entries": enhanced, "summary": summary}
+
+
+def _fmt_currency(val):
+    return f"Rs.{val:,.2f}"
+
+
 @router.get("/villages")
 async def get_villages(current_user: dict = Depends(verify_token)):
     villages = await accounts_collection.distinct("village")

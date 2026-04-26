@@ -25,6 +25,8 @@ export default function AccountDetailPage() {
   const navigate = useNavigate();
   const [account, setAccount] = useState(null);
   const [ledger, setLedger] = useState([]);
+  const [ledgerSummary, setLedgerSummary] = useState(null);
+  const [expandedRow, setExpandedRow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   
@@ -51,10 +53,11 @@ export default function AccountDetailPage() {
     try {
       const [accountRes, ledgerRes] = await Promise.all([
         api.get(`/api/accounts/${id}`),
-        api.get(`/api/ledger/${id}`)
+        api.get(`/api/ledger-enhanced/${id}`)
       ]);
       setAccount(accountRes.data);
-      setLedger(ledgerRes.data);
+      setLedger(ledgerRes.data.entries || []);
+      setLedgerSummary(ledgerRes.data.summary || null);
     } catch (error) {
       toast.error('Failed to load account details');
       navigate('/accounts');
@@ -404,42 +407,98 @@ export default function AccountDetailPage() {
         {/* Ledger Tab */}
         {activeTab === 'ledger' && (
           <Card>
+            {/* Ledger Summary Strip */}
+            {ledgerSummary && (
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/80">
+                <div className="flex flex-wrap items-center gap-6">
+                  <div className="flex items-center gap-2" data-testid="ledger-total-interest-charged">
+                    <span className="text-xs font-medium text-slate-500 uppercase">Interest Charged:</span>
+                    <span className="text-sm font-bold font-mono text-amber-700">{formatCurrency(ledgerSummary.total_interest_charged)}</span>
+                  </div>
+                  <div className="flex items-center gap-2" data-testid="ledger-total-interest-paid">
+                    <span className="text-xs font-medium text-slate-500 uppercase">Interest Paid:</span>
+                    <span className="text-sm font-bold font-mono text-emerald-700">{formatCurrency(ledgerSummary.total_interest_paid)}</span>
+                  </div>
+                  <div className="flex items-center gap-2" data-testid="ledger-pending-interest">
+                    <span className="text-xs font-medium text-slate-500 uppercase">Pending Interest:</span>
+                    <span className="text-sm font-bold font-mono text-red-600">{formatCurrency(ledgerSummary.pending_interest)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <CardContent className="p-0">
               {ledger.length === 0 ? (
                 <p className="text-center py-12 text-slate-500">No ledger entries</p>
               ) : (
                 <div className="table-container">
-                  <table className="w-full min-w-[800px]">
+                  <table className="w-full min-w-[1100px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
-                        {['Date','Type','Amount','Principal','Interest','Balance','Rem. Principal','Rem. Interest'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">{h}</th>
-                        ))}
+                        <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase">Type</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Entry Amount</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Interest Charged</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Interest Paid</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Principal Paid</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Balance</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Rem. Principal</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Rem. Interest</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase">Notes</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {ledger.map((entry, i) => (
-                        <tr key={i} className={`hover:bg-slate-50 ${entry.transaction_type === 'CLOSED' ? 'bg-red-50' : entry.transaction_type === 'REOPENED' ? 'bg-green-50' : ''}`}>
-                          <td className="px-4 py-3 text-sm">{formatDate(entry.transaction_date)}</td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              entry.transaction_type === 'LANDED' ? 'bg-emerald-100 text-emerald-700' :
-                              entry.transaction_type === 'PAYMENT' ? 'bg-blue-100 text-blue-700' :
-                              entry.transaction_type === 'CLOSED' ? 'bg-red-100 text-red-700' :
-                              entry.transaction_type === 'REOPENED' ? 'bg-green-100 text-green-700' :
-                              'bg-slate-100 text-slate-700'
-                            }`}>
-                              {entry.transaction_type}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.amount)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.principal_amount)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.interest_amount)}</td>
-                          <td className="px-4 py-3 text-sm font-mono font-medium">{formatCurrency(entry.balance_amount)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.remaining_principal)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.remaining_interest)}</td>
-                        </tr>
-                      ))}
+                      {ledger.map((entry, i) => {
+                        const isLanded = entry.transaction_type === 'LANDED';
+                        const isPayment = entry.transaction_type === 'PAYMENT';
+                        const isClosed = entry.transaction_type === 'CLOSED';
+                        const isReopened = entry.transaction_type === 'REOPENED';
+                        const rowBg = isClosed ? 'bg-red-50/50' : isReopened ? 'bg-green-50/50' : isLanded ? 'bg-emerald-50/30' : isPayment ? 'bg-blue-50/30' : '';
+                        return (
+                          <React.Fragment key={i}>
+                            <tr className={`${rowBg} hover:bg-slate-100/50 cursor-pointer transition-colors`} onClick={() => setExpandedRow(expandedRow === i ? null : i)} data-testid={`ledger-row-${i}`}>
+                              <td className="px-3 py-3 text-sm text-slate-600">{formatDate(entry.transaction_date)}</td>
+                              <td className="px-3 py-3">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  isLanded ? 'bg-emerald-100 text-emerald-700' :
+                                  isPayment ? 'bg-blue-100 text-blue-700' :
+                                  isClosed ? 'bg-red-100 text-red-700' :
+                                  isReopened ? 'bg-green-100 text-green-700' :
+                                  'bg-slate-100 text-slate-700'
+                                }`}>
+                                  {entry.transaction_type}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-sm font-mono text-right font-medium">{formatCurrency(entry.amount)}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right text-amber-700">{entry.interest_charged > 0 ? formatCurrency(entry.interest_charged) : '-'}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right text-emerald-700">{parseFloat(entry.interest_amount || 0) > 0 ? formatCurrency(entry.interest_amount) : '-'}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right text-blue-700">{parseFloat(entry.principal_amount || 0) > 0 ? formatCurrency(entry.principal_amount) : '-'}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right font-bold">{formatCurrency(entry.computed_balance)}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right">{formatCurrency(entry.remaining_principal)}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right text-red-600">{parseFloat(entry.remaining_interest || 0) > 0 ? formatCurrency(entry.remaining_interest) : '-'}</td>
+                              <td className="px-3 py-3 text-xs text-slate-500 max-w-[200px] truncate" title={entry.notes}>{entry.notes}</td>
+                            </tr>
+                            {expandedRow === i && (
+                              <tr className="bg-slate-50/80">
+                                <td colSpan={10} className="px-6 py-4">
+                                  <div className="text-sm space-y-1">
+                                    <p className="font-medium text-slate-700">Transaction Details</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-slate-600">
+                                      <div><span className="text-slate-400">Entry Amount:</span> <span className="font-mono">{formatCurrency(entry.amount)}</span></div>
+                                      <div><span className="text-slate-400">Principal Paid:</span> <span className="font-mono">{formatCurrency(entry.principal_amount || 0)}</span></div>
+                                      <div><span className="text-slate-400">Interest Paid:</span> <span className="font-mono">{formatCurrency(entry.interest_amount || 0)}</span></div>
+                                      <div><span className="text-slate-400">Interest Charged:</span> <span className="font-mono">{formatCurrency(entry.interest_charged || 0)}</span></div>
+                                      <div><span className="text-slate-400">Remaining Principal:</span> <span className="font-mono">{formatCurrency(entry.remaining_principal)}</span></div>
+                                      <div><span className="text-slate-400">Remaining Interest:</span> <span className="font-mono">{formatCurrency(entry.remaining_interest)}</span></div>
+                                      <div><span className="text-slate-400">Balance:</span> <span className="font-mono font-bold">{formatCurrency(entry.computed_balance)}</span></div>
+                                    </div>
+                                    {entry.notes && <p className="mt-2 text-xs"><span className="text-slate-400">Notes:</span> {entry.notes}</p>}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

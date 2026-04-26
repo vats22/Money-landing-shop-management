@@ -7,14 +7,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Spinner } from '../components/ui/Spinner';
 import { 
   TrendingUp, TrendingDown, Wallet, Clock, Users, FileText,
-  ArrowRight, Gem, Lock
+  ArrowRight, Gem, Lock, Calendar, Filter
 } from 'lucide-react';
+import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
+
+const getDefaultStart = () => {
+  const d = new Date(); d.setDate(d.getDate() - 90);
+  return d.toISOString().split('T')[0];
+};
+const getToday = () => new Date().toISOString().split('T')[0];
 
 export default function DashboardPage() {
   const { hasPermission, isAdmin } = useAuth();
   const [summary, setSummary] = useState(null);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
     fetchDashboardData();
@@ -22,9 +32,13 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      const qs = params.toString() ? `?${params.toString()}` : '';
       const [summaryRes, statsRes] = await Promise.all([
-        api.get('/api/dashboard/summary'),
-        api.get('/api/dashboard/stats')
+        api.get(`/api/dashboard/summary${qs}`),
+        api.get(`/api/dashboard/stats${qs}`)
       ]);
       setSummary(summaryRes.data);
       setStats(statsRes.data);
@@ -77,6 +91,31 @@ export default function DashboardPage() {
           </Link>
         )}
       </div>
+
+      {/* Date Filter */}
+      <Card>
+        <CardContent className="py-3 px-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Filter className="h-4 w-4" />
+              <span className="font-medium">Filter by Date:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" data-testid="dash-start-date" max={getToday()} />
+              <span className="text-slate-400">to</span>
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" data-testid="dash-end-date" max={getToday()} />
+            </div>
+            <Button size="sm" onClick={() => { setLoading(true); fetchDashboardData(); }} data-testid="dash-apply-filter">
+              Apply
+            </Button>
+            {(startDate || endDate) && (
+              <Button variant="ghost" size="sm" onClick={() => { setStartDate(''); setEndDate(''); setTimeout(() => { setLoading(true); fetchDashboardData(); }, 0); }} data-testid="dash-clear-filter">
+                Clear
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Active Accounts Summary Cards */}
       <div>

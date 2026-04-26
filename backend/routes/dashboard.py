@@ -7,8 +7,21 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/summary")
-async def get_dashboard_summary(current_user: dict = Depends(verify_token)):
-    accounts = await accounts_collection.find().to_list(10000)
+async def get_dashboard_summary(
+    current_user: dict = Depends(verify_token),
+    start_date: str = None,
+    end_date: str = None
+):
+    query = {}
+    if start_date:
+        query["opening_date"] = query.get("opening_date", {})
+        query["opening_date"]["$gte"] = start_date
+    if end_date:
+        if "opening_date" not in query:
+            query["opening_date"] = {}
+        query["opening_date"]["$lte"] = end_date
+
+    accounts = await accounts_collection.find(query).to_list(10000)
     # Active accounts totals
     active_landed = active_received = active_pending = active_interest = 0.0
     # Closed accounts totals
@@ -40,10 +53,25 @@ async def get_dashboard_summary(current_user: dict = Depends(verify_token)):
 
 
 @router.get("/stats")
-async def get_dashboard_stats(current_user: dict = Depends(verify_token)):
-    total_accounts = await accounts_collection.count_documents({})
-    active_accounts = await accounts_collection.count_documents({"status": "continue"})
-    closed_accounts = await accounts_collection.count_documents({"status": "closed"})
+async def get_dashboard_stats(
+    current_user: dict = Depends(verify_token),
+    start_date: str = None,
+    end_date: str = None
+):
+    query = {}
+    if start_date:
+        query["opening_date"] = query.get("opening_date", {})
+        query["opening_date"]["$gte"] = start_date
+    if end_date:
+        if "opening_date" not in query:
+            query["opening_date"] = {}
+        query["opening_date"]["$lte"] = end_date
+
+    total_accounts = await accounts_collection.count_documents(query)
+    active_query = {**query, "status": "continue"}
+    closed_query = {**query, "status": "closed"}
+    active_accounts = await accounts_collection.count_documents(active_query)
+    closed_accounts = await accounts_collection.count_documents(closed_query)
     return {
         "total_accounts": total_accounts,
         "active_accounts": active_accounts,

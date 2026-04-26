@@ -228,7 +228,7 @@ export default function AccountsPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="w-48">
+            <div className="w-56">
               <Input
                 data-testid="search-input"
                 placeholder="Search name / account #"
@@ -238,7 +238,7 @@ export default function AccountsPage() {
               />
             </div>
             {/* Searchable village multi-select */}
-            <div className="w-48">
+            <div className="w-52">
               <MultiSelectDropdown
                 options={villages}
                 value={villageFilter}
@@ -262,7 +262,7 @@ export default function AccountsPage() {
               </Select>
             </div>
             {/* Date range picker */}
-            <div className="w-52">
+            <div className="w-64">
               <DateRangePicker
                 startDate={startDate}
                 endDate={endDate}
@@ -354,9 +354,17 @@ export default function AccountsPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 font-mono text-sm font-medium text-emerald-700">{account.account_number}</td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => navigate(`/accounts/${account.id}`)} className="font-mono text-sm font-medium text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer" data-testid={`click-acct-num-${account.id}`}>
+                            {account.account_number}
+                          </button>
+                        </td>
                         <td className="px-4 py-3 text-sm text-slate-600">{formatDate(account.opening_date)}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-slate-900">{account.name}</td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => navigate(`/accounts/${account.id}`)} className="text-sm font-medium text-slate-900 hover:text-emerald-700 hover:underline cursor-pointer" data-testid={`click-acct-name-${account.id}`}>
+                            {account.name}
+                          </button>
+                        </td>
                         <td className="px-4 py-3 text-sm text-slate-600">{account.village}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{account.jewellery_items?.length || 0} items</td>
                         <td className="px-4 py-3 font-mono text-sm text-slate-700">{formatWeight(account.total_jewellery_weight)}</td>
