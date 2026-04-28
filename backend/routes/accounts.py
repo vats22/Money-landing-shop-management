@@ -390,78 +390,275 @@ async def get_account_ledger(account_id: str, current_user: dict = Depends(verif
 
 @router.get("/ledger-enhanced/{account_id}")
 async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(verify_token)):
-    """Enhanced ledger with computed notes, interest charged, and proper balance"""
+    """
+    Enhanced ledger with computed notes, interest charged, breakdown, and proper balance.
+    Re-simulates payments chronologically to expose per-entry breakdown (principal, rate, days, interest)
+    without touching the underlying DB schema. Notes are generated dynamically.
+    """
     account = await accounts_collection.find_one({"account_number": account_id}) or \
               await accounts_collection.find_one({"_id": ObjectId(account_id)})
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    ledger_raw = await ledger_collection.find({"account_id": str(account["_id"])}).sort("transaction_date", 1).to_list(1000)
-    if not ledger_raw:
-        ledger_raw = await ledger_collection.find({"account_id": account_id}).sort("transaction_date", 1).to_list(1000)
+    landed_src = account.get("landed_entries", []) or []
+    received_src = account.get("received_entries", []) or []
 
-    entries = serialize_doc(ledger_raw)
-    enhanced = []
+    # Build chronological timeline (LANDED + PAYMENT)
+    timeline = []
+    for e in landed_src:
+        timeline.append({"type": "LANDED", "date": e.get("date", ""), "ref": e})
+    for r in received_src:
+        timeline.append({"type": "PAYMENT", "date": r.get("date", ""), "ref": r})
+    timeline.sort(key=lambda x: x["date"])
+
+    # Active landed entries (live state during simulation)
+    active = []  # each: {date, rate, remaining_principal, interest_start_date, carried_forward_interest}
+    rows = []
+    landed_count = 0
     total_interest_charged = 0.0
     total_interest_paid = 0.0
 
-    for i, entry in enumerate(entries):
-        e = {**entry}
-        txn_type = e.get("transaction_type", "")
-        amount = float(e.get("amount", 0))
-        interest_amt = float(e.get("interest_amount", 0))
-        principal_amt = float(e.get("principal_amount", 0))
-        rem_principal = float(e.get("remaining_principal", 0))
-        rem_interest = float(e.get("remaining_interest", 0))
+    for t in timeline:
+        if t["type"] == "LANDED":
+            ref = t["ref"]
+            le = {
+                "date": ref.get("date", ""),
+                "rate": float(ref.get("interest_rate", 2) or 2),
+                "remaining_principal": float(ref.get("amount", 0) or 0),
+                "interest_start_date": ref.get("date", ""),
+                "carried_forward_interest": 0.0,
+                "original_amount": float(ref.get("amount", 0) or 0),
+            }
+            active.append(le)
+            landed_count += 1
+            running_principal = sum(x["remaining_principal"] for x in active)
+            running_interest = sum(x["carried_forward_interest"] for x in active)
+            rows.append({
+                "transaction_type": "LANDED",
+                "transaction_date": ref.get("date", ""),
+                "amount": le["original_amount"],
+                "interest_charged": 0,
+                "interest_amount": 0,
+                "principal_amount": 0,
+                "remaining_principal": round(running_principal, 2),
+                "remaining_interest": round(running_interest, 2),
+                "computed_balance": round(running_principal + running_interest, 2),
+                "breakdown": [{
+                    "landed_date": le["date"],
+                    "principal": round(le["original_amount"], 2),
+                    "rate": le["rate"],
+                    "days": 0,
+                    "interest_due": 0,
+                    "interest_paid": 0,
+                    "principal_paid": 0,
+                }],
+                "notes": "Loan disbursed" if landed_count == 1 else "Additional loan added",
+            })
+            continue
 
-        # Compute balance = remaining principal + remaining interest
-        e["computed_balance"] = round(rem_principal + rem_interest, 2)
+        # PAYMENT
+        ref = t["ref"]
+        try:
+            payment_date = datetime.fromisoformat(ref.get("date", ""))
+        except Exception:
+            payment_date = datetime.now(timezone.utc)
+        if payment_date.tzinfo is None:
+            payment_date = payment_date.replace(tzinfo=timezone.utc)
+        payment_amount = float(ref.get("amount", 0) or 0)
 
-        if txn_type == "LANDED":
-            e["interest_charged"] = 0
-            e["notes"] = "Loan disbursed" if i == 0 else "Additional loan added"
-        elif txn_type == "PAYMENT":
-            e["interest_charged"] = round(interest_amt + rem_interest, 2)
-            total_interest_charged += e["interest_charged"]
-            total_interest_paid += interest_amt
+        # Capture per-entry interest snapshot at payment_date
+        breakdown = []
+        total_interest_due = 0.0
+        for le in active:
+            if le["remaining_principal"] <= 0:
+                continue
+            try:
+                isd = datetime.fromisoformat(le["interest_start_date"])
+            except Exception:
+                isd = payment_date
+            if isd.tzinfo is None:
+                isd = isd.replace(tzinfo=timezone.utc)
+            days = max(0, (payment_date - isd).days)
+            calc_int = (le["remaining_principal"] * le["rate"] * days) / (100 * 30)
+            interest_due = round(calc_int + le["carried_forward_interest"], 2)
+            breakdown.append({
+                "landed_date": le["date"],
+                "principal": round(le["remaining_principal"], 2),
+                "rate": le["rate"],
+                "days": days,
+                "calculated_interest": round(calc_int, 2),
+                "carried_forward": round(le["carried_forward_interest"], 2),
+                "interest_due": interest_due,
+                "interest_paid": 0.0,
+                "principal_paid": 0.0,
+                "_le": le,  # internal ref for matching
+            })
+            total_interest_due += interest_due
 
-            notes_parts = []
-            if interest_amt > 0 and principal_amt > 0:
-                notes_parts.append(f"Interest cleared: {_fmt_currency(interest_amt)}")
-                notes_parts.append(f"Principal paid: {_fmt_currency(principal_amt)}")
-            elif interest_amt > 0 and principal_amt == 0:
-                if rem_interest > 0:
-                    notes_parts.append(f"Partial interest paid, {_fmt_currency(rem_interest)} carried forward")
-                else:
-                    notes_parts.append(f"Interest paid: {_fmt_currency(interest_amt)}")
-            elif principal_amt > 0:
-                notes_parts.append(f"Principal reduced by {_fmt_currency(principal_amt)}")
+        remaining = payment_amount
+        interest_paid_total = 0.0
+        principal_paid_total = 0.0
 
-            e["notes"] = "; ".join(notes_parts) if notes_parts else "Payment received"
-        elif txn_type == "CLOSED":
-            e["interest_charged"] = 0
-            e["notes"] = "Account closed"
-        elif txn_type == "REOPENED":
-            e["interest_charged"] = 0
-            e["notes"] = "Account reopened"
+        if remaining >= total_interest_due:
+            # Full interest cleared
+            interest_paid_total = total_interest_due
+            remaining -= total_interest_due
+            for b in breakdown:
+                b["interest_paid"] = b["interest_due"]
+                b["_le"]["carried_forward_interest"] = 0.0
+                b["_le"]["interest_start_date"] = ref.get("date", "")
+            # FIFO principal repayment
+            for le in active:
+                if remaining <= 0:
+                    break
+                if le["remaining_principal"] <= 0:
+                    continue
+                pay_p = min(remaining, le["remaining_principal"])
+                le["remaining_principal"] -= pay_p
+                principal_paid_total += pay_p
+                remaining -= pay_p
+                for b in breakdown:
+                    if b["_le"] is le:
+                        b["principal_paid"] = round(b["principal_paid"] + pay_p, 2)
+                        break
         else:
-            e["interest_charged"] = 0
-            e["notes"] = ""
+            # Partial interest
+            interest_paid_total = remaining
+            if total_interest_due > 0:
+                for b in breakdown:
+                    if b["interest_due"] <= 0:
+                        continue
+                    proportion = b["interest_due"] / total_interest_due
+                    paid_for_this = round(remaining * proportion, 2)
+                    cf = round(b["interest_due"] - paid_for_this, 2)
+                    b["interest_paid"] = paid_for_this
+                    b["_le"]["carried_forward_interest"] = cf
+                    b["_le"]["interest_start_date"] = ref.get("date", "")
+            remaining = 0
 
-        enhanced.append(e)
+        # Strip internal refs
+        for b in breakdown:
+            b.pop("_le", None)
 
-    # Summary
+        running_principal = sum(le["remaining_principal"] for le in active)
+        running_interest = sum(le["carried_forward_interest"] for le in active)
+        remaining_interest_after = round(running_interest, 2)
+
+        # Build dynamic notes
+        notes_parts = []
+        active_breakdown = [b for b in breakdown if b["interest_due"] > 0 or b["principal_paid"] > 0]
+        if len(active_breakdown) == 1 and active_breakdown[0]["days"] > 0:
+            b = active_breakdown[0]
+            notes_parts.append(f"Interest for {b['days']} days @{b['rate']}%")
+        elif len(active_breakdown) > 1:
+            notes_parts.append(f"Interest across {len(active_breakdown)} entries")
+
+        if interest_paid_total > 0 and principal_paid_total > 0 and remaining_interest_after == 0:
+            notes_parts.append(f"Interest cleared, {_fmt_inr(principal_paid_total)} applied to principal")
+        elif interest_paid_total > 0 and remaining_interest_after > 0:
+            notes_parts.append(f"Partial interest paid, {_fmt_inr(remaining_interest_after)} carried forward")
+        elif interest_paid_total > 0 and principal_paid_total == 0:
+            notes_parts.append("Interest paid in full")
+        elif principal_paid_total > 0 and interest_paid_total == 0:
+            notes_parts.append(f"Principal reduced by {_fmt_inr(principal_paid_total)}")
+
+        notes = "; ".join(notes_parts) if notes_parts else "Payment received"
+
+        total_interest_charged += round(total_interest_due, 2)
+        total_interest_paid += round(interest_paid_total, 2)
+
+        rows.append({
+            "transaction_type": "PAYMENT",
+            "transaction_date": ref.get("date", ""),
+            "amount": payment_amount,
+            "interest_charged": round(total_interest_due, 2),
+            "interest_amount": round(interest_paid_total, 2),
+            "principal_amount": round(principal_paid_total, 2),
+            "remaining_principal": round(running_principal, 2),
+            "remaining_interest": remaining_interest_after,
+            "computed_balance": round(running_principal + remaining_interest_after, 2),
+            "breakdown": breakdown,
+            "notes": notes,
+        })
+
+    # Append CLOSED / REOPENED events (chronologically merged)
+    events = []
+    for h in (account.get("close_history") or []):
+        events.append({"type": "CLOSED", "date": h.get("closed_at", ""), "by": h.get("closed_by_name", ""),
+                       "remarks": h.get("remarks", ""),
+                       "pending_principal": float(h.get("final_pending_amount", 0) or 0),
+                       "pending_interest": float(h.get("final_pending_interest", 0) or 0)})
+    for h in (account.get("reopen_history") or []):
+        events.append({"type": "REOPENED", "date": h.get("reopened_at", ""), "by": h.get("reopened_by_name", ""),
+                       "reason": h.get("reason", "")})
+
+    for ev in events:
+        try:
+            ev["_sort"] = datetime.fromisoformat(ev["date"].replace("Z", "+00:00"))
+        except Exception:
+            ev["_sort"] = datetime.now(timezone.utc)
+
+    for ev in sorted(events, key=lambda x: x["_sort"]):
+        if ev["type"] == "CLOSED":
+            rows.append({
+                "transaction_type": "CLOSED",
+                "transaction_date": ev["date"],
+                "amount": 0,
+                "interest_charged": 0,
+                "interest_amount": 0,
+                "principal_amount": 0,
+                "remaining_principal": ev["pending_principal"],
+                "remaining_interest": ev["pending_interest"],
+                "computed_balance": round(ev["pending_principal"] + ev["pending_interest"], 2),
+                "breakdown": [],
+                "notes": f"Account closed by {ev['by']}" + (f" — {ev['remarks']}" if ev.get("remarks") else ""),
+            })
+        else:
+            rows.append({
+                "transaction_type": "REOPENED",
+                "transaction_date": ev["date"],
+                "amount": 0,
+                "interest_charged": 0,
+                "interest_amount": 0,
+                "principal_amount": 0,
+                "remaining_principal": 0,
+                "remaining_interest": 0,
+                "computed_balance": 0,
+                "breakdown": [],
+                "notes": f"Account reopened by {ev['by']}" + (f" — {ev['reason']}" if ev.get("reason") else ""),
+            })
+
     summary = {
         "total_interest_charged": round(total_interest_charged, 2),
         "total_interest_paid": round(total_interest_paid, 2),
         "pending_interest": round(total_interest_charged - total_interest_paid, 2),
     }
 
-    return {"entries": enhanced, "summary": summary}
+    return {"entries": rows, "summary": summary}
 
 
-def _fmt_currency(val):
-    return f"Rs.{val:,.2f}"
+def _fmt_inr(val):
+    """Format as Indian Rupees with ₹ symbol and 2 decimals using Indian numbering."""
+    try:
+        amt = float(val)
+    except Exception:
+        return f"₹{val}"
+    sign = "-" if amt < 0 else ""
+    amt = abs(amt)
+    # Indian numbering: e.g. 12,34,567.89
+    int_part, dec_part = f"{amt:.2f}".split(".")
+    if len(int_part) > 3:
+        last3 = int_part[-3:]
+        rest = int_part[:-3]
+        # Group rest in 2s from right
+        groups = []
+        while len(rest) > 2:
+            groups.insert(0, rest[-2:])
+            rest = rest[:-2]
+        if rest:
+            groups.insert(0, rest)
+        int_part = ",".join(groups) + "," + last3
+    return f"{sign}₹{int_part}.{dec_part}"
 
 
 @router.get("/villages")

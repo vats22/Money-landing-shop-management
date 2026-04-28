@@ -431,7 +431,7 @@ export default function AccountDetailPage() {
                 <p className="text-center py-12 text-slate-500">No ledger entries</p>
               ) : (
                 <div className="table-container">
-                  <table className="w-full min-w-[1100px]">
+                  <table className="w-full min-w-[1200px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
                         <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
@@ -439,10 +439,10 @@ export default function AccountDetailPage() {
                         <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Entry Amount</th>
                         <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Interest Charged</th>
                         <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Interest Paid</th>
-                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Principal Paid</th>
-                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Balance</th>
-                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Rem. Principal</th>
                         <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Rem. Interest</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Principal Paid</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Rem. Principal</th>
+                        <th className="px-3 py-3 text-right text-xs font-medium text-slate-500 uppercase">Balance</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase">Notes</th>
                       </tr>
                     </thead>
@@ -453,6 +453,7 @@ export default function AccountDetailPage() {
                         const isClosed = entry.transaction_type === 'CLOSED';
                         const isReopened = entry.transaction_type === 'REOPENED';
                         const rowBg = isClosed ? 'bg-red-50/50' : isReopened ? 'bg-green-50/50' : isLanded ? 'bg-emerald-50/30' : isPayment ? 'bg-blue-50/30' : '';
+                        const principalPaidVal = parseFloat(entry.principal_amount || 0);
                         return (
                           <React.Fragment key={i}>
                             <tr className={`${rowBg} hover:bg-slate-100/50 cursor-pointer transition-colors`} onClick={() => setExpandedRow(expandedRow === i ? null : i)} data-testid={`ledger-row-${i}`}>
@@ -468,30 +469,74 @@ export default function AccountDetailPage() {
                                   {entry.transaction_type}
                                 </span>
                               </td>
-                              <td className="px-3 py-3 text-sm font-mono text-right font-medium">{formatCurrency(entry.amount)}</td>
-                              <td className="px-3 py-3 text-sm font-mono text-right text-amber-700">{entry.interest_charged > 0 ? formatCurrency(entry.interest_charged) : '-'}</td>
-                              <td className="px-3 py-3 text-sm font-mono text-right text-emerald-700">{parseFloat(entry.interest_amount || 0) > 0 ? formatCurrency(entry.interest_amount) : '-'}</td>
-                              <td className="px-3 py-3 text-sm font-mono text-right text-blue-700">{parseFloat(entry.principal_amount || 0) > 0 ? formatCurrency(entry.principal_amount) : '-'}</td>
-                              <td className="px-3 py-3 text-sm font-mono text-right font-bold">{formatCurrency(entry.computed_balance)}</td>
-                              <td className="px-3 py-3 text-sm font-mono text-right">{formatCurrency(entry.remaining_principal)}</td>
-                              <td className="px-3 py-3 text-sm font-mono text-right text-red-600">{parseFloat(entry.remaining_interest || 0) > 0 ? formatCurrency(entry.remaining_interest) : '-'}</td>
-                              <td className="px-3 py-3 text-xs text-slate-500 max-w-[200px] truncate" title={entry.notes}>{entry.notes}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right font-medium tabular-nums">{(isClosed || isReopened) ? '-' : formatCurrency(entry.amount)}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right text-amber-700 tabular-nums">{entry.interest_charged > 0 ? formatCurrency(entry.interest_charged) : '-'}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right text-emerald-700 tabular-nums">{parseFloat(entry.interest_amount || 0) > 0 ? formatCurrency(entry.interest_amount) : '-'}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right text-red-600 tabular-nums">{parseFloat(entry.remaining_interest || 0) > 0 ? formatCurrency(entry.remaining_interest) : '-'}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right text-blue-700 tabular-nums">{isLanded ? '-' : (principalPaidVal > 0 ? formatCurrency(principalPaidVal) : '-')}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right tabular-nums">{formatCurrency(entry.remaining_principal)}</td>
+                              <td className="px-3 py-3 text-sm font-mono text-right font-bold tabular-nums">{formatCurrency(entry.computed_balance)}</td>
+                              <td className="px-3 py-3 text-xs text-slate-600 max-w-[260px] truncate" title={entry.notes}>{entry.notes}</td>
                             </tr>
                             {expandedRow === i && (
                               <tr className="bg-slate-50/80">
                                 <td colSpan={10} className="px-6 py-4">
-                                  <div className="text-sm space-y-1">
+                                  <div className="text-sm space-y-3">
                                     <p className="font-medium text-slate-700">Transaction Details</p>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-slate-600">
-                                      <div><span className="text-slate-400">Entry Amount:</span> <span className="font-mono">{formatCurrency(entry.amount)}</span></div>
-                                      <div><span className="text-slate-400">Principal Paid:</span> <span className="font-mono">{formatCurrency(entry.principal_amount || 0)}</span></div>
-                                      <div><span className="text-slate-400">Interest Paid:</span> <span className="font-mono">{formatCurrency(entry.interest_amount || 0)}</span></div>
-                                      <div><span className="text-slate-400">Interest Charged:</span> <span className="font-mono">{formatCurrency(entry.interest_charged || 0)}</span></div>
-                                      <div><span className="text-slate-400">Remaining Principal:</span> <span className="font-mono">{formatCurrency(entry.remaining_principal)}</span></div>
-                                      <div><span className="text-slate-400">Remaining Interest:</span> <span className="font-mono">{formatCurrency(entry.remaining_interest)}</span></div>
-                                      <div><span className="text-slate-400">Balance:</span> <span className="font-mono font-bold">{formatCurrency(entry.computed_balance)}</span></div>
+                                      <div><span className="text-slate-400">Entry Amount:</span> <span className="font-mono tabular-nums">{(isClosed || isReopened) ? '-' : formatCurrency(entry.amount)}</span></div>
+                                      <div><span className="text-slate-400">Interest Charged:</span> <span className="font-mono tabular-nums">{entry.interest_charged > 0 ? formatCurrency(entry.interest_charged) : '-'}</span></div>
+                                      <div><span className="text-slate-400">Interest Paid:</span> <span className="font-mono tabular-nums">{parseFloat(entry.interest_amount || 0) > 0 ? formatCurrency(entry.interest_amount) : '-'}</span></div>
+                                      <div><span className="text-slate-400">Rem. Interest:</span> <span className="font-mono tabular-nums">{parseFloat(entry.remaining_interest || 0) > 0 ? formatCurrency(entry.remaining_interest) : '-'}</span></div>
+                                      <div><span className="text-slate-400">Principal Paid:</span> <span className="font-mono tabular-nums">{isLanded ? '-' : (principalPaidVal > 0 ? formatCurrency(principalPaidVal) : '-')}</span></div>
+                                      <div><span className="text-slate-400">Rem. Principal:</span> <span className="font-mono tabular-nums">{formatCurrency(entry.remaining_principal)}</span></div>
+                                      <div><span className="text-slate-400">Balance:</span> <span className="font-mono font-bold tabular-nums">{formatCurrency(entry.computed_balance)}</span></div>
                                     </div>
-                                    {entry.notes && <p className="mt-2 text-xs"><span className="text-slate-400">Notes:</span> {entry.notes}</p>}
+
+                                    {/* Per-entry breakdown for PAYMENT rows */}
+                                    {isPayment && Array.isArray(entry.breakdown) && entry.breakdown.length > 0 && (
+                                      <div className="mt-3">
+                                        <p className="font-medium text-slate-700 mb-2 text-xs uppercase tracking-wide">Breakdown</p>
+                                        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                          <table className="w-full text-xs">
+                                            <thead className="bg-slate-100">
+                                              <tr>
+                                                <th className="px-3 py-2 text-left text-slate-500 font-medium">Landed Date</th>
+                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Principal</th>
+                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Rate</th>
+                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Days</th>
+                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Interest Due</th>
+                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Interest Paid</th>
+                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Principal Paid</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                              {entry.breakdown.map((b, bi) => (
+                                                <tr key={bi} className="hover:bg-slate-50">
+                                                  <td className="px-3 py-2 text-slate-600">{formatDate(b.landed_date)}</td>
+                                                  <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCurrency(b.principal)}</td>
+                                                  <td className="px-3 py-2 text-right font-mono tabular-nums">{b.rate}%</td>
+                                                  <td className="px-3 py-2 text-right font-mono tabular-nums">{b.days}</td>
+                                                  <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-700">{formatCurrency(b.interest_due)}</td>
+                                                  <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-700">{b.interest_paid > 0 ? formatCurrency(b.interest_paid) : '-'}</td>
+                                                  <td className="px-3 py-2 text-right font-mono tabular-nums text-blue-700">{b.principal_paid > 0 ? formatCurrency(b.principal_paid) : '-'}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Per-entry context for LANDED rows */}
+                                    {isLanded && Array.isArray(entry.breakdown) && entry.breakdown.length > 0 && (
+                                      <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-4 text-xs text-slate-600">
+                                        <div><span className="text-slate-400">Principal:</span> <span className="font-mono tabular-nums">{formatCurrency(entry.breakdown[0].principal)}</span></div>
+                                        <div><span className="text-slate-400">Rate:</span> <span className="font-mono tabular-nums">{entry.breakdown[0].rate}%</span></div>
+                                      </div>
+                                    )}
+
+                                    {entry.notes && <p className="text-xs mt-2"><span className="text-slate-400">Notes:</span> <span className="text-slate-700">{entry.notes}</span></p>}
                                   </div>
                                 </td>
                               </tr>
