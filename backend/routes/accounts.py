@@ -544,14 +544,24 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
         running_interest = sum(le["carried_forward_interest"] for le in active)
         remaining_interest_after = round(running_interest, 2)
 
-        # Build dynamic notes
+        # Build dynamic notes (split new vs carry-forward interest for clarity)
         notes_parts = []
         active_breakdown = [b for b in breakdown if b["interest_due"] > 0 or b["principal_paid"] > 0]
+        new_interest_total = round(sum(b.get("calculated_interest", 0) for b in active_breakdown), 2)
+        carried_total = round(sum(b.get("carried_forward", 0) for b in active_breakdown), 2)
+
         if len(active_breakdown) == 1 and active_breakdown[0]["days"] > 0:
             b = active_breakdown[0]
-            notes_parts.append(f"Interest for {b['days']} days @{b['rate']}%")
+            head = f"Interest for {b['days']} days @{b['rate']}% = {_fmt_inr(b['calculated_interest'])}"
+            if (b.get("carried_forward") or 0) > 0:
+                head += f" + Previous interest {_fmt_inr(b['carried_forward'])}. Total {_fmt_inr(b['interest_due'])}"
+            notes_parts.append(head)
         elif len(active_breakdown) > 1:
-            notes_parts.append(f"Interest across {len(active_breakdown)} entries")
+            head = f"Interest across {len(active_breakdown)} entries: New {_fmt_inr(new_interest_total)}"
+            if carried_total > 0:
+                head += f" + Carry forward {_fmt_inr(carried_total)}"
+            head += f". Total {_fmt_inr(round(new_interest_total + carried_total, 2))}"
+            notes_parts.append(head)
 
         if interest_paid_total > 0 and principal_paid_total > 0 and remaining_interest_after == 0:
             notes_parts.append(f"Interest cleared, {_fmt_inr(principal_paid_total)} applied to principal")
@@ -562,7 +572,7 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
         elif principal_paid_total > 0 and interest_paid_total == 0:
             notes_parts.append(f"Principal reduced by {_fmt_inr(principal_paid_total)}")
 
-        notes = "; ".join(notes_parts) if notes_parts else "Payment received"
+        notes = ". ".join(notes_parts) + "." if notes_parts else "Payment received"
 
         total_interest_charged += round(total_interest_due, 2)
         total_interest_paid += round(interest_paid_total, 2)

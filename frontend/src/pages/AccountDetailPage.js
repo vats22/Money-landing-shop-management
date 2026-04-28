@@ -479,47 +479,98 @@ export default function AccountDetailPage() {
                               <td className="px-3 py-3 text-xs text-slate-600 max-w-[260px] truncate" title={entry.notes}>{entry.notes}</td>
                             </tr>
                             {expandedRow === i && (
-                              <tr className="bg-slate-50/80">
-                                <td colSpan={10} className="px-6 py-4">
-                                  <div className="text-sm space-y-3">
-                                    <p className="font-medium text-slate-700">Transaction Details</p>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-slate-600">
-                                      <div><span className="text-slate-400">Entry Amount:</span> <span className="font-mono tabular-nums">{(isClosed || isReopened) ? '-' : formatCurrency(entry.amount)}</span></div>
-                                      <div><span className="text-slate-400">Interest Charged:</span> <span className="font-mono tabular-nums">{entry.interest_charged > 0 ? formatCurrency(entry.interest_charged) : '-'}</span></div>
-                                      <div><span className="text-slate-400">Interest Paid:</span> <span className="font-mono tabular-nums">{parseFloat(entry.interest_amount || 0) > 0 ? formatCurrency(entry.interest_amount) : '-'}</span></div>
-                                      <div><span className="text-slate-400">Rem. Interest:</span> <span className="font-mono tabular-nums">{parseFloat(entry.remaining_interest || 0) > 0 ? formatCurrency(entry.remaining_interest) : '-'}</span></div>
-                                      <div><span className="text-slate-400">Principal Paid:</span> <span className="font-mono tabular-nums">{isLanded ? '-' : (principalPaidVal > 0 ? formatCurrency(principalPaidVal) : '-')}</span></div>
-                                      <div><span className="text-slate-400">Rem. Principal:</span> <span className="font-mono tabular-nums">{formatCurrency(entry.remaining_principal)}</span></div>
-                                      <div><span className="text-slate-400">Balance:</span> <span className="font-mono font-bold tabular-nums">{formatCurrency(entry.computed_balance)}</span></div>
+                              <tr className="bg-gradient-to-br from-slate-50 to-slate-100/50">
+                                <td colSpan={10} className="p-0">
+                                  <div className="m-3 rounded-xl bg-white shadow-[0_4px_20px_-4px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/70 overflow-hidden">
+                                    {/* Header strip */}
+                                    <div className={`px-5 py-3 border-b border-slate-200 flex items-center justify-between ${
+                                      isPayment ? 'bg-blue-50/60' : isLanded ? 'bg-emerald-50/60' : isClosed ? 'bg-red-50/60' : 'bg-slate-50'
+                                    }`}>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`w-1.5 h-6 rounded-full ${
+                                          isPayment ? 'bg-blue-500' : isLanded ? 'bg-emerald-500' : isClosed ? 'bg-red-500' : 'bg-slate-400'
+                                        }`} />
+                                        <h4 className="text-sm font-semibold text-slate-800 tracking-wide">Transaction Details</h4>
+                                        <span className="text-xs text-slate-500">· {formatDate(entry.transaction_date)}</span>
+                                      </div>
+                                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                        isLanded ? 'bg-emerald-100 text-emerald-700' :
+                                        isPayment ? 'bg-blue-100 text-blue-700' :
+                                        isClosed ? 'bg-red-100 text-red-700' :
+                                        isReopened ? 'bg-green-100 text-green-700' :
+                                        'bg-slate-100 text-slate-700'
+                                      }`}>{entry.transaction_type}</span>
+                                    </div>
+
+                                    {/* Summary stat tiles */}
+                                    <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                                      <div className="rounded-lg bg-slate-50 ring-1 ring-slate-200/60 px-3 py-2">
+                                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Entry Amount</p>
+                                        <p className="text-sm font-mono font-semibold tabular-nums text-slate-800 mt-0.5">{(isClosed || isReopened) ? '-' : formatCurrency(entry.amount)}</p>
+                                      </div>
+                                      <div className="rounded-lg bg-amber-50/70 ring-1 ring-amber-200/60 px-3 py-2">
+                                        <p className="text-[10px] uppercase tracking-wider text-amber-600 font-medium">Interest Charged</p>
+                                        <p className="text-sm font-mono font-semibold tabular-nums text-amber-800 mt-0.5">{entry.interest_charged > 0 ? formatCurrency(entry.interest_charged) : '-'}</p>
+                                      </div>
+                                      <div className="rounded-lg bg-emerald-50/70 ring-1 ring-emerald-200/60 px-3 py-2">
+                                        <p className="text-[10px] uppercase tracking-wider text-emerald-600 font-medium">Interest Paid</p>
+                                        <p className="text-sm font-mono font-semibold tabular-nums text-emerald-800 mt-0.5">{parseFloat(entry.interest_amount || 0) > 0 ? formatCurrency(entry.interest_amount) : '-'}</p>
+                                      </div>
+                                      <div className="rounded-lg bg-red-50/70 ring-1 ring-red-200/60 px-3 py-2">
+                                        <p className="text-[10px] uppercase tracking-wider text-red-600 font-medium">Rem. Interest</p>
+                                        <p className="text-sm font-mono font-semibold tabular-nums text-red-700 mt-0.5">{parseFloat(entry.remaining_interest || 0) > 0 ? formatCurrency(entry.remaining_interest) : '-'}</p>
+                                      </div>
+                                      <div className="rounded-lg bg-blue-50/70 ring-1 ring-blue-200/60 px-3 py-2">
+                                        <p className="text-[10px] uppercase tracking-wider text-blue-600 font-medium">Principal Paid</p>
+                                        <p className="text-sm font-mono font-semibold tabular-nums text-blue-800 mt-0.5">{isLanded ? '-' : (principalPaidVal > 0 ? formatCurrency(principalPaidVal) : '-')}</p>
+                                      </div>
+                                      <div className="rounded-lg bg-slate-50 ring-1 ring-slate-200/60 px-3 py-2">
+                                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Rem. Principal</p>
+                                        <p className="text-sm font-mono font-semibold tabular-nums text-slate-800 mt-0.5">{formatCurrency(entry.remaining_principal)}</p>
+                                      </div>
+                                      <div className="rounded-lg bg-purple-50/70 ring-1 ring-purple-200/60 px-3 py-2 col-span-2 md:col-span-1">
+                                        <p className="text-[10px] uppercase tracking-wider text-purple-600 font-medium">Balance</p>
+                                        <p className="text-sm font-mono font-bold tabular-nums text-purple-800 mt-0.5">{formatCurrency(entry.computed_balance)}</p>
+                                      </div>
                                     </div>
 
                                     {/* Per-entry breakdown for PAYMENT rows */}
                                     {isPayment && Array.isArray(entry.breakdown) && entry.breakdown.length > 0 && (
-                                      <div className="mt-3">
-                                        <p className="font-medium text-slate-700 mb-2 text-xs uppercase tracking-wide">Breakdown</p>
-                                        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                      <div className="px-5 pb-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <p className="font-semibold text-slate-700 text-xs uppercase tracking-wider">Interest Breakdown</p>
+                                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full" title="Total Interest = New Interest + Previous Pending (Carry Forward) Interest">
+                                            <span className="text-slate-400">ⓘ</span>
+                                            Total = New + Carry Forward
+                                          </span>
+                                        </div>
+                                        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                                           <table className="w-full text-xs">
-                                            <thead className="bg-slate-100">
+                                            <thead className="bg-gradient-to-r from-slate-50 to-slate-100">
                                               <tr>
-                                                <th className="px-3 py-2 text-left text-slate-500 font-medium">Landed Date</th>
-                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Principal</th>
-                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Rate</th>
-                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Days</th>
-                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Interest Due</th>
-                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Interest Paid</th>
-                                                <th className="px-3 py-2 text-right text-slate-500 font-medium">Principal Paid</th>
+                                                <th className="px-3 py-2.5 text-left text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Landed Date</th>
+                                                <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Principal</th>
+                                                <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Rate</th>
+                                                <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Days</th>
+                                                <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]" title="Interest = (Principal × Rate × Days) / (100 × 30)">New Interest</th>
+                                                <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]" title="Previous unpaid interest brought forward">Carry Forward</th>
+                                                <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px] bg-amber-50/50">Total Interest</th>
+                                                <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Interest Paid</th>
+                                                <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Principal Paid</th>
                                               </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
                                               {entry.breakdown.map((b, bi) => (
-                                                <tr key={bi} className="hover:bg-slate-50">
-                                                  <td className="px-3 py-2 text-slate-600">{formatDate(b.landed_date)}</td>
-                                                  <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCurrency(b.principal)}</td>
-                                                  <td className="px-3 py-2 text-right font-mono tabular-nums">{b.rate}%</td>
-                                                  <td className="px-3 py-2 text-right font-mono tabular-nums">{b.days}</td>
-                                                  <td className="px-3 py-2 text-right font-mono tabular-nums text-amber-700">{formatCurrency(b.interest_due)}</td>
-                                                  <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-700">{b.interest_paid > 0 ? formatCurrency(b.interest_paid) : '-'}</td>
-                                                  <td className="px-3 py-2 text-right font-mono tabular-nums text-blue-700">{b.principal_paid > 0 ? formatCurrency(b.principal_paid) : '-'}</td>
+                                                <tr key={bi} className="hover:bg-slate-50/70 transition-colors">
+                                                  <td className="px-3 py-2.5 text-slate-700 font-medium">{formatDate(b.landed_date)}</td>
+                                                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">{formatCurrency(b.principal)}</td>
+                                                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">{b.rate}%</td>
+                                                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">{b.days}</td>
+                                                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-amber-700">{formatCurrency(b.calculated_interest || 0)}</td>
+                                                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-orange-600">{(b.carried_forward || 0) > 0 ? formatCurrency(b.carried_forward) : '-'}</td>
+                                                  <td className="px-3 py-2.5 text-right font-mono tabular-nums font-bold text-amber-900 bg-amber-50/40">{formatCurrency(b.interest_due)}</td>
+                                                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-emerald-700">{b.interest_paid > 0 ? formatCurrency(b.interest_paid) : '-'}</td>
+                                                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-blue-700">{b.principal_paid > 0 ? formatCurrency(b.principal_paid) : '-'}</td>
                                                 </tr>
                                               ))}
                                             </tbody>
@@ -530,13 +581,27 @@ export default function AccountDetailPage() {
 
                                     {/* Per-entry context for LANDED rows */}
                                     {isLanded && Array.isArray(entry.breakdown) && entry.breakdown.length > 0 && (
-                                      <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-4 text-xs text-slate-600">
-                                        <div><span className="text-slate-400">Principal:</span> <span className="font-mono tabular-nums">{formatCurrency(entry.breakdown[0].principal)}</span></div>
-                                        <div><span className="text-slate-400">Rate:</span> <span className="font-mono tabular-nums">{entry.breakdown[0].rate}%</span></div>
+                                      <div className="px-5 pb-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+                                        <div className="rounded-lg bg-emerald-50/60 ring-1 ring-emerald-200/60 px-3 py-2">
+                                          <p className="text-[10px] uppercase tracking-wider text-emerald-600 font-medium">Principal</p>
+                                          <p className="text-sm font-mono font-semibold tabular-nums text-emerald-800 mt-0.5">{formatCurrency(entry.breakdown[0].principal)}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-emerald-50/60 ring-1 ring-emerald-200/60 px-3 py-2">
+                                          <p className="text-[10px] uppercase tracking-wider text-emerald-600 font-medium">Interest Rate</p>
+                                          <p className="text-sm font-mono font-semibold tabular-nums text-emerald-800 mt-0.5">{entry.breakdown[0].rate}% per month</p>
+                                        </div>
                                       </div>
                                     )}
 
-                                    {entry.notes && <p className="text-xs mt-2"><span className="text-slate-400">Notes:</span> <span className="text-slate-700">{entry.notes}</span></p>}
+                                    {/* Notes footer */}
+                                    {entry.notes && (
+                                      <div className="px-5 py-3 bg-slate-50/70 border-t border-slate-200">
+                                        <p className="text-xs leading-relaxed">
+                                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mr-2">Notes</span>
+                                          <span className="text-slate-700">{entry.notes}</span>
+                                        </p>
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
