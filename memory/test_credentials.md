@@ -13,4 +13,4 @@
 - Password: `viewer123`
 
 ## Frontend URL
-https://app-showcase-233.preview.emergentagent.com
+https://web-showcase-217.preview.emergentagent.com
