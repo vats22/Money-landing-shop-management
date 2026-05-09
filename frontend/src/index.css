@@ -127,3 +127,29 @@ thead.sticky-header .sticky-col { z-index: 15; background: #F8FAFC; }
 @media (max-width: 767px) {
   .tap-target { min-height: 44px; }
 }
+
+/* Native date inputs — consistent sizing & full width */
+input[type="date"] {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 42px;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  padding-right: 0.5rem;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 0 4px;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Hide scrollbar but keep functionality (used for tab strips) */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

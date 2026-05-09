@@ -615,12 +615,12 @@ export default function AccountFormPage() {
         <div className={stepCls(1)}>
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
               <CardTitle className="flex items-center gap-2">
                 <Gem className="h-5 w-5 text-amber-500" />
                 Jewellery Items
               </CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={addJewelleryItem}>
+              <Button type="button" variant="outline" size="sm" onClick={addJewelleryItem} className="self-start sm:self-auto tap-target" data-testid="add-jewellery-btn">
                 <Plus className="h-4 w-4 mr-1" />
                 Add Item
               </Button>
@@ -699,12 +699,12 @@ export default function AccountFormPage() {
         <div className={stepCls(2)}>
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-emerald-600" />
                 Landed Entries (Money Lent)
               </CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={addLandedEntry}>
+              <Button type="button" variant="outline" size="sm" onClick={addLandedEntry} className="self-start sm:self-auto tap-target" data-testid="add-landed-btn">
                 <Plus className="h-4 w-4 mr-1" />
                 Add Entry
               </Button>
@@ -810,12 +810,12 @@ export default function AccountFormPage() {
         <div className={stepCls(3)}>
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
               <CardTitle className="flex items-center gap-2">
                 <TrendingDown className="h-5 w-5 text-blue-600" />
                 Received Entries (Payments)
               </CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={addReceivedEntry}>
+              <Button type="button" variant="outline" size="sm" onClick={addReceivedEntry} className="self-start sm:self-auto tap-target" data-testid="add-received-btn">
                 <Plus className="h-4 w-4 mr-1" />
                 Add Payment
               </Button>

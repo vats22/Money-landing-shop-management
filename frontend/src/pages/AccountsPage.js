@@ -76,18 +76,22 @@ export default function AccountsPage() {
     fetchVillages();
   }, [page, sortBy, sortOrder, limit]);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = async (overrides = {}) => {
     setLoading(true);
     try {
+      const eff = {
+        search, villageFilter, statusFilter, startDate, endDate,
+        ...overrides,
+      };
       const params = new URLSearchParams({
         page: page.toString(), limit: limit.toString(),
         sort_by: sortBy, sort_order: sortOrder,
       });
-      if (search) params.append('search', search);
-      if (villageFilter.length > 0) params.append('village', villageFilter.join(','));
-      if (statusFilter) params.append('status', statusFilter);
-      if (startDate) params.append('start_date', startDate);
-      if (endDate) params.append('end_date', endDate);
+      if (eff.search) params.append('search', eff.search);
+      if (eff.villageFilter && eff.villageFilter.length > 0) params.append('village', eff.villageFilter.join(','));
+      if (eff.statusFilter) params.append('status', eff.statusFilter);
+      if (eff.startDate) params.append('start_date', eff.startDate);
+      if (eff.endDate) params.append('end_date', eff.endDate);
       const response = await api.get(`/api/accounts?${params}`);
       setAccounts(response.data.accounts);
       setTotalPages(response.data.total_pages);
@@ -136,11 +140,14 @@ export default function AccountsPage() {
   };
 
   const clearFilters = () => {
+    const freshStart = getDefaultStartDate();
+    const freshEnd = getToday();
     setSearch(''); setVillageFilter([]); setStatusFilter('');
-    setStartDate(getDefaultStartDate()); setEndDate(getToday());
+    setStartDate(freshStart); setEndDate(freshEnd);
     setPage(1);
     localStorage.removeItem(FILTER_STORAGE_KEY);
-    setTimeout(() => fetchAccounts(), 0);
+    // Auto-apply with fresh values directly (don't wait for state propagation)
+    fetchAccounts({ search: '', villageFilter: [], statusFilter: '', startDate: freshStart, endDate: freshEnd });
   };
 
   const SortIcon = ({ column }) => {
@@ -322,7 +329,7 @@ export default function AccountsPage() {
             <div className="sticky top-0 bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <div className="w-10 h-1 rounded-full bg-slate-300 absolute left-1/2 -translate-x-1/2 -top-2" />
               <h3 className="text-base font-semibold text-primary-ink">Filters</h3>
-              <button type="button" onClick={clearFilters} className="text-xs text-secondary-ink hover:text-slate-900 tap-target px-2 py-1">Reset</button>
+              <button type="button" onClick={() => { clearFilters(); setShowFilterSheet(false); }} className="text-xs text-secondary-ink hover:text-slate-900 tap-target px-2 py-1">Reset</button>
             </div>
             <div className="p-4 space-y-4">
               <div>
