@@ -11,9 +11,11 @@ import { toast } from 'sonner';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
+import NoteEditor from '../components/ui/NoteEditor';
 import {
   ArrowLeft, Plus, Trash2, Gem, TrendingUp, TrendingDown, Save,
-  Image as ImageIcon, Upload, Camera, X, ChevronLeft, ChevronRight, FileText
+  Image as ImageIcon, Upload, Camera, X, ChevronLeft, ChevronRight, FileText,
+  StickyNote
 } from 'lucide-react';
 
 // Get today's date for max date
@@ -65,9 +67,13 @@ export default function AccountFormPage() {
     status: 'continue',
     details: '',
     jewellery_items: [{ name: '', weight: '' }],
-    landed_entries: [{ date: today, amount: '', interest_rate: '2' }],
+    landed_entries: [{ date: today, amount: '', interest_rate: '2', note: '' }],
     received_entries: []
   });
+
+  // UI state for "+ Add note" expand on each entry row
+  const [openLandedNote, setOpenLandedNote] = useState({});
+  const [openReceivedNote, setOpenReceivedNote] = useState({});
 
   // Image modal state
   const MAX_IMAGES = 5;
@@ -107,9 +113,9 @@ export default function AccountFormPage() {
           ? account.jewellery_items.map(item => ({ ...item, images: item.images || [] }))
           : [{ name: '', weight: '', images: [] }],
         landed_entries: account.landed_entries?.length > 0 
-          ? account.landed_entries 
-          : [{ date: '', amount: '', interest_rate: '2' }],
-        received_entries: account.received_entries || []
+          ? account.landed_entries.map(e => ({ ...e, note: e.note || '' }))
+          : [{ date: '', amount: '', interest_rate: '2', note: '' }],
+        received_entries: (account.received_entries || []).map(e => ({ ...e, note: e.note || '' }))
       });
     } catch (error) {
       toast.error('Failed to fetch account');
@@ -152,7 +158,7 @@ export default function AccountFormPage() {
   const addLandedEntry = () => {
     setFormData(prev => ({
       ...prev,
-      landed_entries: [...prev.landed_entries, { date: new Date().toISOString().split('T')[0], amount: '', interest_rate: '2' }]
+      landed_entries: [...prev.landed_entries, { date: new Date().toISOString().split('T')[0], amount: '', interest_rate: '2', note: '' }]
     }));
   };
 
@@ -176,7 +182,7 @@ export default function AccountFormPage() {
   const addReceivedEntry = () => {
     setFormData(prev => ({
       ...prev,
-      received_entries: [...prev.received_entries, { date: new Date().toISOString().split('T')[0], amount: '' }]
+      received_entries: [...prev.received_entries, { date: new Date().toISOString().split('T')[0], amount: '', note: '' }]
     }));
   };
 
@@ -387,6 +393,7 @@ export default function AccountFormPage() {
           date: entry.date,
           amount: parseFloat(entry.amount),
           interest_rate: parseFloat(entry.interest_rate) || 2,
+          note: DOMPurify.sanitize(entry.note || ''),
           remaining_principal: entry.remaining_principal !== undefined ? parseFloat(entry.remaining_principal) : parseFloat(entry.amount),
           last_interest_calc_date: entry.last_interest_calc_date || entry.date,
           accumulated_interest: entry.accumulated_interest !== undefined ? parseFloat(entry.accumulated_interest) : 0
@@ -397,6 +404,7 @@ export default function AccountFormPage() {
         .map(entry => ({
           date: entry.date,
           amount: parseFloat(entry.amount),
+          note: DOMPurify.sanitize(entry.note || ''),
           principal_paid: entry.principal_paid !== undefined ? parseFloat(entry.principal_paid) : 0,
           interest_paid: entry.interest_paid !== undefined ? parseFloat(entry.interest_paid) : 0
         }));
@@ -652,55 +660,92 @@ export default function AccountFormPage() {
           <CardContent>
             <div className="space-y-3">
               {formData.landed_entries.map((entry, index) => (
-                <div key={index} className="flex gap-4 items-start p-4 bg-emerald-50 rounded-lg">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                      Landed Date *
-                    </label>
-                    <Input
-                      data-testid={`landed-date-${index}`}
-                      type="date"
-                      value={entry.date}
-                      onChange={(e) => updateLandedEntry(index, 'date', e.target.value)}
-                      min={formData.opening_date}
-                      max={today}
-                    />
+                <div key={index} className="p-4 bg-emerald-50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-start">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-secondary-ink mb-1">
+                        Landed Date *
+                      </label>
+                      <Input
+                        data-testid={`landed-date-${index}`}
+                        type="date"
+                        value={entry.date}
+                        onChange={(e) => updateLandedEntry(index, 'date', e.target.value)}
+                        min={formData.opening_date}
+                        max={today}
+                        className="tap-target"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-secondary-ink mb-1">
+                        Amount (₹) *
+                      </label>
+                      <Input
+                        data-testid={`landed-amount-${index}`}
+                        type="text"
+                        inputMode="decimal"
+                        value={entry.amount}
+                        onChange={handleNumericInput(updateLandedEntry, 'amount', index)}
+                        placeholder="10000"
+                        className="tap-target"
+                      />
+                    </div>
+                    <div className="sm:w-32">
+                      <label className="block text-xs font-medium text-secondary-ink mb-1">
+                        Interest % (Monthly)
+                      </label>
+                      <Input
+                        data-testid={`landed-interest-${index}`}
+                        type="text"
+                        inputMode="decimal"
+                        value={entry.interest_rate}
+                        onChange={handleNumericInput(updateLandedEntry, 'interest_rate', index)}
+                        placeholder="2"
+                        className="tap-target"
+                      />
+                    </div>
+                    {formData.landed_entries.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteEntryConfirm({ type: 'landed', index })}
+                        className="self-end sm:mt-6 p-2 hover:bg-red-100 rounded-lg transition-colors tap-target"
+                        aria-label="Remove entry"
+                      >
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </button>
+                    )}
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                      Amount (₹) *
-                    </label>
-                    <Input
-                      data-testid={`landed-amount-${index}`}
-                      type="text"
-                      inputMode="decimal"
-                      value={entry.amount}
-                      onChange={handleNumericInput(updateLandedEntry, 'amount', index)}
-                      placeholder="10000"
-                    />
+                  {/* Note toggle / editor */}
+                  <div className="mt-2">
+                    {!openLandedNote[index] && !((entry.note || '').trim()) ? (
+                      <button
+                        type="button"
+                        data-testid={`landed-note-toggle-${index}`}
+                        onClick={() => setOpenLandedNote(o => ({ ...o, [index]: true }))}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:text-emerald-900"
+                      >
+                        <StickyNote className="h-3.5 w-3.5" />
+                        + Add note
+                      </button>
+                    ) : (
+                      <div className="rounded-lg">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-medium text-secondary-ink">Note</label>
+                          <button
+                            type="button"
+                            onClick={() => { updateLandedEntry(index, 'note', ''); setOpenLandedNote(o => ({ ...o, [index]: false })); }}
+                            className="text-[11px] text-muted-ink hover:text-slate-700"
+                          >Remove</button>
+                        </div>
+                        <NoteEditor
+                          testId={`landed-note-editor-${index}`}
+                          value={entry.note || ''}
+                          onChange={(html) => updateLandedEntry(index, 'note', html)}
+                          placeholder="e.g. Cash given against gold chain…"
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="w-32">
-                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                      Interest % (Monthly)
-                    </label>
-                    <Input
-                      data-testid={`landed-interest-${index}`}
-                      type="text"
-                      inputMode="decimal"
-                      value={entry.interest_rate}
-                      onChange={handleNumericInput(updateLandedEntry, 'interest_rate', index)}
-                      placeholder="2"
-                    />
-                  </div>
-                  {formData.landed_entries.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setDeleteEntryConfirm({ type: 'landed', index })}
-                      className="mt-6 p-2 hover:bg-red-100 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </button>
-                  )}
                 </div>
               ))}
             </div>
@@ -729,40 +774,76 @@ export default function AccountFormPage() {
             ) : (
               <div className="space-y-3">
                 {formData.received_entries.map((entry, index) => (
-                  <div key={index} className="flex gap-4 items-start p-4 bg-blue-50 rounded-lg">
-                    <div className="flex-1">
-                      <label className="block text-xs font-medium text-slate-500 mb-1">
-                        Received Date *
-                      </label>
-                      <Input
-                        data-testid={`received-date-${index}`}
-                        type="date"
-                        value={entry.date}
-                        onChange={(e) => updateReceivedEntry(index, 'date', e.target.value)}
-                        min={formData.opening_date}
-                        max={today}
-                      />
+                  <div key={index} className="p-4 bg-blue-50 rounded-lg">
+                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-start">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-secondary-ink mb-1">
+                          Received Date *
+                        </label>
+                        <Input
+                          data-testid={`received-date-${index}`}
+                          type="date"
+                          value={entry.date}
+                          onChange={(e) => updateReceivedEntry(index, 'date', e.target.value)}
+                          min={formData.opening_date}
+                          max={today}
+                          className="tap-target"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-secondary-ink mb-1">
+                          Amount (₹) *
+                        </label>
+                        <Input
+                          data-testid={`received-amount-${index}`}
+                          type="text"
+                          inputMode="decimal"
+                          value={entry.amount}
+                          onChange={handleNumericInput(updateReceivedEntry, 'amount', index)}
+                          placeholder="5000"
+                          className="tap-target"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteEntryConfirm({ type: 'received', index })}
+                        className="self-end sm:mt-6 p-2 hover:bg-red-100 rounded-lg transition-colors tap-target"
+                        aria-label="Remove payment"
+                      >
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </button>
                     </div>
-                    <div className="flex-1">
-                      <label className="block text-xs font-medium text-slate-500 mb-1">
-                        Amount (₹) *
-                      </label>
-                      <Input
-                        data-testid={`received-amount-${index}`}
-                        type="text"
-                        inputMode="decimal"
-                        value={entry.amount}
-                        onChange={handleNumericInput(updateReceivedEntry, 'amount', index)}
-                        placeholder="5000"
-                      />
+                    {/* Note toggle / editor */}
+                    <div className="mt-2">
+                      {!openReceivedNote[index] && !((entry.note || '').trim()) ? (
+                        <button
+                          type="button"
+                          data-testid={`received-note-toggle-${index}`}
+                          onClick={() => setOpenReceivedNote(o => ({ ...o, [index]: true }))}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:text-blue-900"
+                        >
+                          <StickyNote className="h-3.5 w-3.5" />
+                          + Add note
+                        </button>
+                      ) : (
+                        <div className="rounded-lg">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-medium text-secondary-ink">Note</label>
+                            <button
+                              type="button"
+                              onClick={() => { updateReceivedEntry(index, 'note', ''); setOpenReceivedNote(o => ({ ...o, [index]: false })); }}
+                              className="text-[11px] text-muted-ink hover:text-slate-700"
+                            >Remove</button>
+                          </div>
+                          <NoteEditor
+                            testId={`received-note-editor-${index}`}
+                            value={entry.note || ''}
+                            onChange={(html) => updateReceivedEntry(index, 'note', html)}
+                            placeholder="e.g. Cash · UPI · partial gold returned…"
+                          />
+                        </div>
+                      )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteEntryConfirm({ type: 'received', index })}
-                      className="mt-6 p-2 hover:bg-red-100 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </button>
                   </div>
                 ))}
               </div>

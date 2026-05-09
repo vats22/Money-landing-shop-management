@@ -36,6 +36,7 @@ class LandedEntry(BaseModel):
     date: str
     amount: float
     interest_rate: float
+    note: Optional[str] = ""
     remaining_principal: Optional[float] = None
     last_interest_calc_date: Optional[str] = None
     accumulated_interest: Optional[float] = 0.0
@@ -43,6 +44,7 @@ class LandedEntry(BaseModel):
 class ReceivedEntry(BaseModel):
     date: str
     amount: float
+    note: Optional[str] = ""
     principal_paid: Optional[float] = 0.0
     interest_paid: Optional[float] = 0.0
 

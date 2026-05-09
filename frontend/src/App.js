@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, Link, useLocation } fro
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toaster } from 'sonner';
 import { Spinner } from './components/ui/Spinner';
+import BottomNav, { defaultBottomNavItems } from './components/ui/BottomNav';
 import {
   LayoutDashboard,
   FileText,
@@ -215,10 +216,13 @@ const DashboardLayout = () => {
         </header>
 
         {/* Page Content */}
-        <main className="p-6 lg:p-8">
+        <main className="p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8">
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <BottomNav items={defaultBottomNavItems} onMore={() => setSidebarOpen(true)} />
     </div>
   );
 };

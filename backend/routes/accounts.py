@@ -113,6 +113,7 @@ async def create_account(account: AccountCreate, current_user: dict = Depends(ve
         entry_dict["remaining_principal"] = entry.amount
         entry_dict["interest_start_date"] = entry.date
         entry_dict["carried_forward_interest"] = 0.0
+        entry_dict["note"] = entry.note or ""
         landed_entries.append(entry_dict)
     received_entries = []
     if account.received_entries:
@@ -126,6 +127,7 @@ async def create_account(account: AccountCreate, current_user: dict = Depends(ve
             recv_dict["principal_paid"] = principal_paid
             recv_dict["interest_paid"] = interest_paid
             recv_dict["remaining_interest"] = remaining_interest
+            recv_dict["note"] = recv_entry.note or ""
             received_entries.append(recv_dict)
     user_name = f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get('username')
     account_doc = {
@@ -179,6 +181,7 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
                     landed_entries.append({
                         "date": entry["date"], "amount": float(entry["amount"]),
                         "interest_rate": float(entry.get("interest_rate", 2)),
+                        "note": entry.get("note", "") or "",
                         "remaining_principal": float(entry["amount"]),
                         "interest_start_date": entry["date"], "carried_forward_interest": 0.0
                     })
@@ -189,6 +192,7 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
                 landed_entries.append({
                     "date": entry["date"], "amount": float(entry["amount"]),
                     "interest_rate": float(entry.get("interest_rate", 2)),
+                    "note": entry.get("note", "") or "",
                     "remaining_principal": float(entry["amount"]),
                     "interest_start_date": entry["date"], "carried_forward_interest": 0.0
                 })
@@ -208,6 +212,7 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
             )
             received_entries.append({
                 "date": recv_entry["date"], "amount": payment_amount,
+                "note": recv_entry.get("note", "") or "",
                 "principal_paid": principal_paid, "interest_paid": interest_paid,
                 "remaining_interest": remaining_interest
             })
@@ -375,6 +380,7 @@ async def add_landed_entry(account_id: str, entry: LandedEntry, current_user: di
     entry_dict["remaining_principal"] = entry.amount
     entry_dict["interest_start_date"] = entry.date
     entry_dict["carried_forward_interest"] = 0.0
+    entry_dict["note"] = entry.note or ""
     await accounts_collection.update_one(
         {"_id": ObjectId(account_id)},
         {"$push": {"landed_entries": entry_dict},
@@ -415,6 +421,7 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
     recv_dict["principal_paid"] = principal_paid
     recv_dict["interest_paid"] = interest_paid
     recv_dict["remaining_interest"] = remaining_interest
+    recv_dict["note"] = entry.note or ""
     await accounts_collection.update_one(
         {"_id": ObjectId(account_id)},
         {"$set": {"landed_entries": landed_entries, "updated_at": datetime.now(timezone.utc),
@@ -492,6 +499,7 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
                 "remaining_principal": round(running_principal, 2),
                 "remaining_interest": round(running_interest, 2),
                 "computed_balance": round(running_principal + running_interest, 2),
+                "user_note": ref.get("note", "") or "",
                 "breakdown": [{
                     "landed_date": le["date"],
                     "interest_start_date": le["interest_start_date"],
@@ -638,6 +646,7 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
             "remaining_principal": round(running_principal, 2),
             "remaining_interest": remaining_interest_after,
             "computed_balance": round(running_principal + remaining_interest_after, 2),
+            "user_note": ref.get("note", "") or "",
             "breakdown": breakdown,
             "notes": notes,
         })

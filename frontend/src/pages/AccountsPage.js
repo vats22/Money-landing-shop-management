@@ -12,10 +12,12 @@ import { Spinner } from '../components/ui/Spinner';
 import { ConfirmDialog } from '../components/ui/Modal';
 import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { MultiSelectDropdown } from '../components/ui/MultiSelectDropdown';
+import AccountCard from '../components/ui/AccountCard';
 import { toast } from 'sonner';
 import {
   Plus, Search, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Eye, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Download
+  Eye, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, X, Download,
+  SlidersHorizontal, FileBox
 } from 'lucide-react';
 
 const FILTER_STORAGE_KEY = 'lendledger_accounts_filters';
@@ -60,6 +62,8 @@ export default function AccountsPage() {
   const [sortBy, setSortBy] = useState('account_number');
   const [sortOrder, setSortOrder] = useState('desc');
   const [deleteId, setDeleteId] = useState(null);
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [density, setDensity] = useState(() => localStorage.getItem('lendledger_density') || 'comfortable');
 
   const canView = isAdmin || hasPermission('accounts', 'view');
   const canAdd = isAdmin || hasPermission('accounts', 'add');
@@ -171,12 +175,12 @@ export default function AccountsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-4 sm:space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold font-display text-slate-900">Accounts</h1>
-          <p className="text-slate-500 mt-1">Manage lending accounts</p>
+          <h1 className="text-2xl sm:text-3xl font-bold font-display text-primary-ink">Accounts</h1>
+          <p className="text-sm text-secondary-ink mt-1">Manage lending accounts</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -195,15 +199,15 @@ export default function AccountsPage() {
               } catch { toast.error('Export failed'); }
             }}
             data-testid="export-accounts-btn"
-            className="flex items-center gap-2 px-3 py-2.5 border border-slate-300 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
+            className="hidden sm:flex items-center gap-2 px-3 py-2.5 border border-slate-300 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors tap-target"
             title="Export to Excel"
           >
             <Download className="h-4 w-4" />
             Export
           </button>
           {canAdd && (
-            <Link to="/accounts/new">
-              <Button data-testid="add-account-btn">
+            <Link to="/accounts/new" className="flex-1 sm:flex-none">
+              <Button data-testid="add-account-btn" className="w-full sm:w-auto tap-target">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Account
               </Button>
@@ -212,12 +216,39 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <Card>
+      {/* Mobile filter trigger */}
+      <div className="lg:hidden flex items-center gap-2">
+        <button
+          onClick={() => setShowFilterSheet(true)}
+          data-testid="open-filter-sheet"
+          className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 border border-slate-300 bg-white text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 tap-target"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          Filters {(villageFilter.length + (statusFilter ? 1 : 0) + (search ? 1 : 0)) > 0 && (
+            <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
+              {villageFilter.length + (statusFilter ? 1 : 0) + (search ? 1 : 0)}
+            </span>
+          )}
+        </button>
+        <Input
+          data-testid="search-input-mobile"
+          placeholder="Search…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          className="flex-1 tap-target"
+        />
+        <Button onClick={handleSearch} data-testid="apply-filters-btn-mobile" size="icon" className="tap-target">
+          <Search className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Desktop filters */}
+      <Card className="hidden lg:block">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Filter className="h-5 w-5 text-slate-500" />
+              <Filter className="h-5 w-5 text-secondary-ink" />
               Filters
             </CardTitle>
             <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -237,7 +268,6 @@ export default function AccountsPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
             </div>
-            {/* Searchable village multi-select */}
             <div className="w-52">
               <MultiSelectDropdown
                 options={villages}
@@ -261,15 +291,11 @@ export default function AccountsPage() {
                 <option value="immediate action needed">Immediate Action Needed</option>
               </Select>
             </div>
-            {/* Date range picker */}
             <div className="w-64">
               <DateRangePicker
                 startDate={startDate}
                 endDate={endDate}
-                onChange={({ startDate: s, endDate: e }) => {
-                  setStartDate(s);
-                  setEndDate(e);
-                }}
+                onChange={({ startDate: s, endDate: e }) => { setStartDate(s); setEndDate(e); }}
                 maxDate={getToday()}
               />
             </div>
@@ -277,40 +303,138 @@ export default function AccountsPage() {
               <Search className="h-4 w-4 mr-2" />
               Apply Filters
             </Button>
+            <div className="ml-auto inline-flex rounded-lg border border-slate-200 bg-white p-0.5" role="group" aria-label="Density">
+              <button
+                onClick={() => { setDensity('comfortable'); localStorage.setItem('lendledger_density','comfortable'); }}
+                className={`px-3 py-1.5 text-xs rounded-md ${density==='comfortable' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                data-testid="density-comfortable"
+              >Comfortable</button>
+              <button
+                onClick={() => { setDensity('compact'); localStorage.setItem('lendledger_density','compact'); }}
+                className={`px-3 py-1.5 text-xs rounded-md ${density==='compact' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                data-testid="density-compact"
+              >Compact</button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Spinner size="lg" />
+      {/* Mobile filter bottom sheet */}
+      {showFilterSheet && (
+        <div className="fixed inset-0 z-50 lg:hidden" data-testid="filter-sheet">
+          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setShowFilterSheet(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl max-h-[85vh] overflow-y-auto safe-bottom animate-slideUp">
+            <div className="sticky top-0 bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <div className="w-10 h-1 rounded-full bg-slate-300 absolute left-1/2 -translate-x-1/2 -top-2" />
+              <h3 className="text-base font-semibold text-primary-ink">Filters</h3>
+              <button onClick={clearFilters} className="text-xs text-secondary-ink hover:text-slate-900">Reset</button>
             </div>
-          ) : accounts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <p className="text-slate-500 mb-4">No accounts found</p>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">Search</label>
+                <Input
+                  placeholder="Name / account #"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">Village</label>
+                <MultiSelectDropdown
+                  options={villages}
+                  value={villageFilter}
+                  onChange={setVillageFilter}
+                  placeholder="All Villages"
+                  searchPlaceholder="Search village..."
+                  testId="village-filter-mobile"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">Status</label>
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  data-testid="status-filter-mobile"
+                >
+                  <option value="">All Status</option>
+                  <option value="continue">Continue</option>
+                  <option value="closed">Closed</option>
+                  <option value="renewed">Renewed</option>
+                  <option value="immediate action needed">Immediate Action Needed</option>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">Opening Date Range</label>
+                <DateRangePicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onChange={({ startDate: s, endDate: e }) => { setStartDate(s); setEndDate(e); }}
+                  maxDate={getToday()}
+                />
+              </div>
+              <div className="pt-2 flex gap-2">
+                <Button variant="outline" onClick={() => setShowFilterSheet(false)} className="flex-1 tap-target">Cancel</Button>
+                <Button onClick={() => { handleSearch(); setShowFilterSheet(false); }} className="flex-1 tap-target" data-testid="apply-filters-sheet-btn">
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
+      ) : accounts.length === 0 ? (
+        <Card>
+          <CardContent>
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+                <FileBox className="h-7 w-7 text-emerald-600" />
+              </div>
+              <p className="text-base font-semibold text-primary-ink mb-1">No accounts found</p>
+              <p className="text-sm text-secondary-ink mb-5">Adjust filters or create your first account.</p>
               {canAdd && (
                 <Link to="/accounts/new">
-                  <Button>
+                  <Button className="tap-target">
                     <Plus className="h-4 w-4 mr-2" />
                     Create First Account
                   </Button>
                 </Link>
               )}
             </div>
-          ) : (
-            <>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Mobile card list */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:hidden" data-testid="accounts-card-list">
+            {accounts.map(account => (
+              <AccountCard
+                key={account.id}
+                account={account}
+                canEdit={canEdit}
+                canDelete={canDelete}
+                onView={() => navigate(`/accounts/${account.id}`)}
+                onEdit={() => navigate(`/accounts/${account.id}/edit`)}
+                onDelete={() => setDeleteId(account.id)}
+              />
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <Card className="hidden lg:block">
+            <CardContent className="p-0">
               <div className="table-container">
-                <table className="w-full min-w-[1800px]">
+                <table className={`w-full min-w-[1800px] ${density === 'compact' ? 'text-xs' : 'text-sm'}`}>
                   <thead className="sticky-header">
                     <tr className="border-b border-slate-200">
-                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-900 bg-slate-50">Actions</th>
+                      <th className={`${density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-4'} text-left font-semibold text-primary-ink bg-slate-50 sticky-col`}>Actions</th>
                       {columns.map((col) => (
-                        <th key={col.key} className="px-4 py-4 text-left text-sm font-semibold text-slate-900 bg-slate-50 whitespace-nowrap">
+                        <th key={col.key} className={`${density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-4'} text-left font-semibold text-primary-ink bg-slate-50 whitespace-nowrap`}>
                           {col.sortable ? (
-                            <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 hover:text-emerald-600 transition-colors">
+                            <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 hover:text-emerald-700 transition-colors">
                               {col.label}
                               <SortIcon column={col.key} />
                             </button>
@@ -322,7 +446,7 @@ export default function AccountsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {accounts.map((account, idx) => (
                       <tr key={account.id} className="hover:bg-slate-50 transition-colors" style={{ animationDelay: `${idx * 50}ms` }}>
-                        <td className="px-4 py-3">
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} sticky-col bg-white`}>
                           <div className="flex items-center gap-1">
                             <button
                               data-testid={`view-account-${account.id}`}
@@ -354,75 +478,69 @@ export default function AccountsPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => navigate(`/accounts/${account.id}`)} className="font-mono text-sm font-medium text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer" data-testid={`click-acct-num-${account.id}`}>
+                        <td className={density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'}>
+                          <button onClick={() => navigate(`/accounts/${account.id}`)} className="font-mono text-sm font-semibold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer" data-testid={`click-acct-num-${account.id}`}>
                             {account.account_number}
                           </button>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{formatDate(account.opening_date)}</td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => navigate(`/accounts/${account.id}`)} className="text-sm font-medium text-slate-900 hover:text-emerald-700 hover:underline cursor-pointer" data-testid={`click-acct-name-${account.id}`}>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{formatDate(account.opening_date)}</td>
+                        <td className={density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'}>
+                          <button onClick={() => navigate(`/accounts/${account.id}`)} className="font-medium text-primary-ink hover:text-emerald-700 hover:underline cursor-pointer" data-testid={`click-acct-name-${account.id}`}>
                             {account.name}
                           </button>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{account.village}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{account.jewellery_items?.length || 0} items</td>
-                        <td className="px-4 py-3 font-mono text-sm text-slate-700">{formatWeight(account.total_jewellery_weight)}</td>
-                        <td className="px-4 py-3 font-mono text-sm text-emerald-700 font-medium">{formatCurrency(account.total_landed_amount)}</td>
-                        <td className="px-4 py-3 font-mono text-sm text-blue-700">{formatCurrency(account.total_received_amount)}</td>
-                        <td className="px-4 py-3 font-mono text-sm text-slate-600">{formatCurrency(account.received_principal)}</td>
-                        <td className="px-4 py-3 font-mono text-sm text-slate-600">{formatCurrency(account.received_interest)}</td>
-                        <td className="px-4 py-3 font-mono text-sm text-amber-700 font-medium">{formatCurrency(account.total_pending_amount)}</td>
-                        <td className="px-4 py-3 font-mono text-sm text-red-600 font-medium">{formatCurrency(account.total_pending_interest)}</td>
-                        <td className="px-4 py-3"><StatusBadge status={account.status} /></td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{account.created_by_name || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-slate-500">{formatDate(account.updated_at)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{account.village}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{account.jewellery_items?.length || 0} items</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-secondary-ink text-right tabular-nums`}>{formatWeight(account.total_jewellery_weight)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-success-ink font-semibold text-right tabular-nums`}>{formatCurrency(account.total_landed_amount)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-info-ink text-right tabular-nums`}>{formatCurrency(account.total_received_amount)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-secondary-ink text-right tabular-nums`}>{formatCurrency(account.received_principal)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-secondary-ink text-right tabular-nums`}>{formatCurrency(account.received_interest)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-warning-ink font-semibold text-right tabular-nums`}>{formatCurrency(account.total_pending_amount)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-danger-ink font-semibold text-right tabular-nums`}>{formatCurrency(account.total_pending_interest)}</td>
+                        <td className={density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'}><StatusBadge status={account.status} /></td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{account.created_by_name || '-'}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-muted-ink`}>{formatDate(account.updated_at)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
 
-              {/* Pagination */}
-              <div className="sticky bottom-0 bg-white border-t border-slate-200 px-4 py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <p className="text-sm text-slate-500">
-                      Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} accounts
-                    </p>
-                    <select
-                      value={limit}
-                      onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
-                      data-testid="page-size-select"
-                      className="px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    >
-                      <option value={10}>10 / page</option>
-                      <option value={30}>30 / page</option>
-                      <option value={50}>50 / page</option>
-                      <option value={100}>100 / page</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" onClick={() => setPage(1)} disabled={page === 1}>
-                      <ChevronsLeft className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="px-4 py-2 text-sm font-medium">Page {page} of {totalPages}</span>
-                    <Button variant="outline" size="icon" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={() => setPage(totalPages)} disabled={page === totalPages}>
-                      <ChevronsRight className="h-4 w-4" />
-                    </Button>
-                  </div>
+          {/* Pagination - works for both views */}
+          <Card>
+            <CardContent className="py-3 px-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <p className="text-xs sm:text-sm text-secondary-ink">
+                    {((page - 1) * limit) + 1}–{Math.min(page * limit, total)} of {total}
+                  </p>
+                  <select
+                    value={limit}
+                    onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+                    data-testid="page-size-select"
+                    className="px-2 py-1.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={30}>30 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button variant="outline" size="icon" onClick={() => setPage(1)} disabled={page === 1} className="tap-target"><ChevronsLeft className="h-4 w-4" /></Button>
+                  <Button variant="outline" size="icon" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="tap-target"><ChevronLeft className="h-4 w-4" /></Button>
+                  <span className="px-3 py-2 text-xs sm:text-sm font-medium">Page {page} / {totalPages}</span>
+                  <Button variant="outline" size="icon" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="tap-target"><ChevronRight className="h-4 w-4" /></Button>
+                  <Button variant="outline" size="icon" onClick={() => setPage(totalPages)} disabled={page === totalPages} className="tap-target"><ChevronsRight className="h-4 w-4" /></Button>
                 </div>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <ConfirmDialog
         isOpen={!!deleteId}

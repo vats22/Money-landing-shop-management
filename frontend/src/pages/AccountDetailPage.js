@@ -14,8 +14,10 @@ import {
   ArrowLeft, Pencil, Gem, Wallet, TrendingUp, TrendingDown,
   Calendar, MapPin, User, FileText, BookOpen, Lock, Unlock,
   AlertCircle, Download, FileSpreadsheet, Image as ImageIcon,
-  X, ChevronLeft, ChevronRight, Clock, ZoomIn, ZoomOut, Maximize2
+  X, ChevronLeft, ChevronRight, Clock, ZoomIn, ZoomOut, Maximize2,
+  StickyNote
 } from 'lucide-react';
+import NotePreview from '../components/ui/NotePreview';
 
 const getToday = () => new Date().toISOString().split('T')[0];
 const MAX_IMAGES = 5;
@@ -342,24 +344,25 @@ export default function AccountDetailPage() {
                   <table className="w-full min-w-[900px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
-                        {['#','Date','Amount','Rate (%)','Remaining Principal','Interest Start','Days','Calculated Interest','Carried Forward','Total Interest'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase whitespace-nowrap">{h}</th>
+                        {['#','Date','Amount','Rate (%)','Remaining Principal','Interest Start','Days','Calculated Interest','Carried Forward','Total Interest','Note'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {account.landed_entries.map((entry, i) => (
                         <tr key={i} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
-                          <td className="px-4 py-3 text-sm">{formatDate(entry.date)}</td>
-                          <td className="px-4 py-3 text-sm font-mono font-medium text-emerald-700">{formatCurrency(entry.amount)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{entry.interest_rate}%</td>
-                          <td className="px-4 py-3 text-sm font-mono text-amber-700">{formatCurrency(entry.remaining_principal)}</td>
-                          <td className="px-4 py-3 text-sm">{formatDate(entry.interest_start_date)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{entry.days}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.calculated_interest)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.carried_forward_interest)}</td>
-                          <td className="px-4 py-3 text-sm font-mono font-medium text-red-600">{formatCurrency(entry.total_interest)}</td>
+                          <td className="px-4 py-3 text-sm text-muted-ink">{i + 1}</td>
+                          <td className="px-4 py-3 text-sm text-primary-ink">{formatDate(entry.date)}</td>
+                          <td className="px-4 py-3 text-sm font-mono font-semibold text-success-ink text-right tabular-nums">{formatCurrency(entry.amount)}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink">{entry.interest_rate}%</td>
+                          <td className="px-4 py-3 text-sm font-mono text-warning-ink text-right tabular-nums">{formatCurrency(entry.remaining_principal)}</td>
+                          <td className="px-4 py-3 text-sm text-primary-ink">{formatDate(entry.interest_start_date)}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{entry.days}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{formatCurrency(entry.calculated_interest)}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{formatCurrency(entry.carried_forward_interest)}</td>
+                          <td className="px-4 py-3 text-sm font-mono font-semibold text-danger-ink text-right tabular-nums">{formatCurrency(entry.total_interest)}</td>
+                          <td className="px-4 py-3"><NotePreview html={entry.note} testId={`landed-note-${i}`} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -381,19 +384,20 @@ export default function AccountDetailPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
-                        {['#','Date','Amount','Principal Paid','Interest Paid'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">{h}</th>
+                        {['#','Date','Amount','Principal Paid','Interest Paid','Note'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {account.received_entries.map((entry, i) => (
                         <tr key={i} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
-                          <td className="px-4 py-3 text-sm">{formatDate(entry.date)}</td>
-                          <td className="px-4 py-3 text-sm font-mono font-medium text-blue-700">{formatCurrency(entry.amount)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.principal_paid)}</td>
-                          <td className="px-4 py-3 text-sm font-mono">{formatCurrency(entry.interest_paid)}</td>
+                          <td className="px-4 py-3 text-sm text-muted-ink">{i + 1}</td>
+                          <td className="px-4 py-3 text-sm text-primary-ink">{formatDate(entry.date)}</td>
+                          <td className="px-4 py-3 text-sm font-mono font-semibold text-info-ink text-right tabular-nums">{formatCurrency(entry.amount)}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{formatCurrency(entry.principal_paid)}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{formatCurrency(entry.interest_paid)}</td>
+                          <td className="px-4 py-3"><NotePreview html={entry.note} testId={`received-note-${i}`} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -476,7 +480,12 @@ export default function AccountDetailPage() {
                               <td className="px-3 py-3 text-sm font-mono text-right text-blue-700 tabular-nums">{isLanded ? '-' : (principalPaidVal > 0 ? formatCurrency(principalPaidVal) : '-')}</td>
                               <td className="px-3 py-3 text-sm font-mono text-right tabular-nums">{formatCurrency(entry.remaining_principal)}</td>
                               <td className="px-3 py-3 text-sm font-mono text-right font-bold tabular-nums">{formatCurrency(entry.computed_balance)}</td>
-                              <td className="px-3 py-3 text-xs text-slate-600 max-w-[260px] truncate" title={entry.notes}>{entry.notes}</td>
+                              <td className="px-3 py-3 text-xs text-secondary-ink max-w-[260px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate" title={entry.notes}>{entry.notes}</span>
+                                  <NotePreview html={entry.user_note} label="User note" testId={`ledger-user-note-${i}`} />
+                                </div>
+                              </td>
                             </tr>
                             {expandedRow === i && (
                               <tr className="bg-gradient-to-br from-slate-50 to-slate-100/50">
@@ -595,12 +604,28 @@ export default function AccountDetailPage() {
                                       </div>
                                     )}
 
+                                    {/* User-provided note (rich text) */}
+                                    {entry.user_note && (
+                                      <div className="px-5 pb-4">
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                                          <div className="flex items-center gap-2 mb-1.5">
+                                            <StickyNote className="h-3.5 w-3.5 text-amber-700" />
+                                            <span className="text-[10px] uppercase tracking-wider text-amber-800 font-semibold">User Note</span>
+                                          </div>
+                                          <div
+                                            className="prose prose-sm max-w-none text-amber-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                                            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(entry.user_note) }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+
                                     {/* Notes footer */}
                                     {entry.notes && (
                                       <div className="px-5 py-3 bg-slate-50/70 border-t border-slate-200">
                                         <p className="text-xs leading-relaxed">
-                                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mr-2">Notes</span>
-                                          <span className="text-slate-700">{entry.notes}</span>
+                                          <span className="text-[10px] uppercase tracking-wider text-muted-ink font-semibold mr-2">Computed</span>
+                                          <span className="text-secondary-ink">{entry.notes}</span>
                                         </p>
                                       </div>
                                     )}
