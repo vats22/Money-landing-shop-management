@@ -12,15 +12,24 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
     to: endDate ? new Date(endDate + 'T00:00:00') : new Date()
   });
   const containerRef = useRef(null);
+  const panelRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
+      // Close only when click is OUTSIDE both the trigger and the calendar panel
+      // (panel is rendered in a portal on mobile, so it's not a child of containerRef).
+      const inTrigger = containerRef.current && containerRef.current.contains(e.target);
+      const inPanel = panelRef.current && panelRef.current.contains(e.target);
+      if (!inTrigger && !inPanel) {
         setOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   useEffect(() => {
@@ -83,7 +92,13 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
 
   // The calendar panel — same structure for desktop popover and mobile portal modal.
   const CalendarPanel = (
-    <div className="bg-white rounded-xl shadow-2xl border border-slate-200 p-3 max-w-[calc(100vw-1.5rem)] overflow-hidden" data-testid="date-range-calendar">
+    <div
+      ref={panelRef}
+      className="bg-white rounded-xl shadow-2xl border border-slate-200 p-3 max-w-[calc(100vw-1.5rem)] overflow-hidden"
+      data-testid="date-range-calendar"
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+    >
       {isMobile && (
         <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
           <h4 className="text-sm font-semibold text-primary-ink">Select date range</h4>
