@@ -27,6 +27,7 @@ Modern web app to digitize jewellery-pledge lending operations: track accounts, 
 - 2026-05-09 — **Bug fixes**: ACC4 detail page TypeError (datetime tz mix), ACC5 pending principal `or` falsy bug, status→closed via dropdown didn't add to close_history, interest_start_date column added to ledger breakdown, image fetch retry/cache. **Uncovered fix**: `update_account` no longer corrupts paid-off remaining_principal when only non-entry fields are updated.
 - 2026-05-09 — **Notes feature**: rich-text (Quill) note per landed/received entry (HTML, max ~500 chars), persisted in DB, displayed in ledger as 📝 icon with popover, full note shown in expanded ledger row.
 - 2026-05-09 — **Mobile / responsive overhaul**: card view <lg, persistent bottom navigation (Home/Accounts/Reports/More), filter bottom sheet, single-column edit form, 44px tap targets, tabular-nums everywhere, sticky table headers + first column, semantic color tokens (text.primary/secondary/muted, state.success/danger/warning/info), density toggle (Comfortable/Compact) on Accounts table, friendly empty states.
+- 2026-05-09 — **Mobile DateRangePicker fix**: FROM/TO chips are now interactive buttons that jump the calendar to that date's month + month/year dropdown caption (`captionLayout="dropdown-buttons"`) for instant navigation. After picking the start date, focus auto-switches to TO with a clear hint. Tested on both mobile (390×844) and desktop viewports.
 
 ### P0 backlog (next)
 - Account Consolidation / Merge wizard (N→1, settle + transfer-in tagged as `is_internal_transfer`)

@@ -11,26 +11,39 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
     from: startDate ? new Date(startDate + 'T00:00:00') : subDays(new Date(), 30),
     to: endDate ? new Date(endDate + 'T00:00:00') : new Date()
   });
+  // Active "side" the user is currently picking — drives which month is displayed.
+  const [activeSide, setActiveSide] = useState('from'); // 'from' | 'to'
+  const [displayMonth, setDisplayMonth] = useState(
+    startDate ? new Date(startDate + 'T00:00:00') : subDays(new Date(), 30)
+  );
   const containerRef = useRef(null);
   const panelRef = useRef(null);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      // Close only when click is OUTSIDE both the trigger and the calendar panel
-      // (panel is rendered in a portal on mobile, so it's not a child of containerRef).
-      const inTrigger = containerRef.current && containerRef.current.contains(e.target);
-      const inPanel = panelRef.current && panelRef.current.contains(e.target);
-      if (!inTrigger && !inPanel) {
+    if (!open) return;
+    // Only attach a global click listener on desktop where the popover sits
+    // inline in the document. On mobile, the modal has its own backdrop that
+    // closes the picker, and adding a global listener can race with DayPicker's
+    // own click handling and close the picker prematurely.
+    const isDesktop = window.innerWidth >= 640;
+    const handleKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', handleKey);
+
+    let handleClickOutside;
+    if (isDesktop) {
+      handleClickOutside = (e) => {
+        const t = e.target;
+        if (t && t.closest && t.closest('[data-testid="date-range-calendar"]')) return;
+        if (containerRef.current && containerRef.current.contains(t)) return;
         setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+    }
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+      if (handleClickOutside) document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     setRange({
@@ -39,7 +52,22 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
     });
   }, [startDate, endDate]);
 
+  // Each time the picker is (re)opened, focus the From side and jump the
+  // visible month to the current From date so the user starts fresh.
+  useEffect(() => {
+    if (open) {
+      setActiveSide('from');
+      const target = startDate
+        ? new Date(startDate + 'T00:00:00')
+        : (range.from || subDays(new Date(), 30));
+      setDisplayMonth(target);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const handleSelect = (selectedRange) => {
+    // eslint-disable-next-line no-console
+    console.log('[DRP] handleSelect:', JSON.stringify(selectedRange));
     if (!selectedRange) return;
     setRange(selectedRange);
     if (selectedRange.from && selectedRange.to) {
@@ -47,7 +75,15 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
         startDate: format(selectedRange.from, 'yyyy-MM-dd'),
         endDate: format(selectedRange.to, 'yyyy-MM-dd')
       });
+      // eslint-disable-next-line no-console
+      console.log('[DRP] both set, CLOSING');
       setOpen(false);
+    } else if (selectedRange.from && !selectedRange.to) {
+      // User just picked the start date — switch focus to TO so the next tap
+      // is interpreted as the end date, and surface visual cue.
+      setActiveSide('to');
+      // eslint-disable-next-line no-console
+      console.log('[DRP] partial selection, awaiting end date');
     }
   };
 
@@ -71,22 +107,56 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // Visible chips showing the current selection so the user knows what's selected
+  // Visible chips showing the current selection — TAPPABLE so users can jump
+  // the visible month to the start or end month quickly.
   const FromToChips = (
     <div className="flex items-center gap-2 mb-3">
-      <div className="flex-1 px-2.5 py-1.5 rounded-md bg-emerald-50 border border-emerald-200">
-        <p className="text-[9px] uppercase tracking-wider text-emerald-700 font-semibold">From</p>
-        <p className="text-xs font-mono tabular-nums text-emerald-900">
+      <button
+        type="button"
+        onClick={() => {
+          setActiveSide('from');
+          if (range.from) setDisplayMonth(range.from);
+        }}
+        data-testid="drp-from-chip"
+        className={`flex-1 px-2.5 py-1.5 rounded-md border text-left transition-all tap-target ${
+          activeSide === 'from'
+            ? 'bg-emerald-600 border-emerald-700 ring-2 ring-emerald-300'
+            : 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+        }`}
+      >
+        <p className={`text-[9px] uppercase tracking-wider font-semibold ${
+          activeSide === 'from' ? 'text-emerald-50' : 'text-emerald-700'
+        }`}>From</p>
+        <p className={`text-xs font-mono tabular-nums ${
+          activeSide === 'from' ? 'text-white' : 'text-emerald-900'
+        }`}>
           {range.from ? format(range.from, 'dd MMM yyyy') : '—'}
         </p>
-      </div>
+      </button>
       <span className="text-secondary-ink">→</span>
-      <div className="flex-1 px-2.5 py-1.5 rounded-md bg-emerald-50 border border-emerald-200">
-        <p className="text-[9px] uppercase tracking-wider text-emerald-700 font-semibold">To</p>
-        <p className="text-xs font-mono tabular-nums text-emerald-900">
+      <button
+        type="button"
+        onClick={() => {
+          setActiveSide('to');
+          if (range.to) setDisplayMonth(range.to);
+          else if (range.from) setDisplayMonth(range.from);
+        }}
+        data-testid="drp-to-chip"
+        className={`flex-1 px-2.5 py-1.5 rounded-md border text-left transition-all tap-target ${
+          activeSide === 'to'
+            ? 'bg-emerald-600 border-emerald-700 ring-2 ring-emerald-300'
+            : 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+        }`}
+      >
+        <p className={`text-[9px] uppercase tracking-wider font-semibold ${
+          activeSide === 'to' ? 'text-emerald-50' : 'text-emerald-700'
+        }`}>To</p>
+        <p className={`text-xs font-mono tabular-nums ${
+          activeSide === 'to' ? 'text-white' : 'text-emerald-900'
+        }`}>
           {range.to ? format(range.to, 'dd MMM yyyy') : '—'}
         </p>
-      </div>
+      </button>
     </div>
   );
 
@@ -114,15 +184,21 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
       )}
       {FromToChips}
       <p className="text-[10px] text-muted-ink mb-2 text-center">
-        Tap <strong>start</strong> date, then tap <strong>end</strong> date
+        {activeSide === 'from'
+          ? 'Pick the start date below'
+          : 'Now pick the end date — use < > or year dropdown to navigate'}
       </p>
       <DayPicker
         mode="range"
         selected={range}
         onSelect={handleSelect}
+        month={displayMonth}
+        onMonthChange={setDisplayMonth}
         numberOfMonths={isMobile ? 1 : 2}
         disabled={{ after: today }}
-        defaultMonth={range.from || subDays(new Date(), 30)}
+        captionLayout="dropdown-buttons"
+        fromYear={2015}
+        toYear={today.getFullYear()}
         showOutsideDays
         modifiersStyles={{
           selected: { backgroundColor: '#059669', color: 'white' },
