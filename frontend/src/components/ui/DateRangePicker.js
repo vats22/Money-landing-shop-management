@@ -107,9 +107,10 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // Visible chips showing the current selection — TAPPABLE so users can jump
-  // the visible month to the start or end month quickly.
-  const FromToChips = (
+  // Visible chips showing the current selection.
+  // On MOBILE they are tappable buttons that jump the calendar to that month.
+  // On DESKTOP they remain static info chips (previous behaviour).
+  const FromToChips = isMobile ? (
     <div className="flex items-center gap-2 mb-3">
       <button
         type="button"
@@ -158,6 +159,22 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
         </p>
       </button>
     </div>
+  ) : (
+    <div className="flex items-center gap-2 mb-3">
+      <div className="flex-1 px-2.5 py-1.5 rounded-md bg-emerald-50 border border-emerald-200">
+        <p className="text-[9px] uppercase tracking-wider text-emerald-700 font-semibold">From</p>
+        <p className="text-xs font-mono tabular-nums text-emerald-900">
+          {range.from ? format(range.from, 'dd MMM yyyy') : '—'}
+        </p>
+      </div>
+      <span className="text-secondary-ink">→</span>
+      <div className="flex-1 px-2.5 py-1.5 rounded-md bg-emerald-50 border border-emerald-200">
+        <p className="text-[9px] uppercase tracking-wider text-emerald-700 font-semibold">To</p>
+        <p className="text-xs font-mono tabular-nums text-emerald-900">
+          {range.to ? format(range.to, 'dd MMM yyyy') : '—'}
+        </p>
+      </div>
+    </div>
   );
 
   // The calendar panel — same structure for desktop popover and mobile portal modal.
@@ -184,21 +201,21 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
       )}
       {FromToChips}
       <p className="text-[10px] text-muted-ink mb-2 text-center">
-        {activeSide === 'from'
-          ? 'Pick the start date below'
-          : 'Now pick the end date — use < > or year dropdown to navigate'}
+        {isMobile
+          ? (activeSide === 'from'
+              ? 'Pick the start date below'
+              : 'Now pick the end date — use < > or year dropdown to navigate')
+          : <>Tap <strong>start</strong> date, then tap <strong>end</strong> date</>}
       </p>
       <DayPicker
         mode="range"
         selected={range}
         onSelect={handleSelect}
-        month={displayMonth}
-        onMonthChange={setDisplayMonth}
+        {...(isMobile
+          ? { month: displayMonth, onMonthChange: setDisplayMonth, captionLayout: 'dropdown-buttons', fromYear: 2015, toYear: today.getFullYear() }
+          : { defaultMonth: range.from || subDays(new Date(), 30) })}
         numberOfMonths={isMobile ? 1 : 2}
         disabled={{ after: today }}
-        captionLayout="dropdown-buttons"
-        fromYear={2015}
-        toYear={today.getFullYear()}
         showOutsideDays
         modifiersStyles={{
           selected: { backgroundColor: '#059669', color: 'white' },
