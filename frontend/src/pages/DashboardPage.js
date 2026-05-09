@@ -9,8 +9,8 @@ import {
   TrendingUp, TrendingDown, Wallet, Clock, Users, FileText,
   ArrowRight, Gem, Lock, Calendar, Filter
 } from 'lucide-react';
-import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import { DateRangePicker } from '../components/ui/DateRangePicker';
 
 const getDefaultStart = () => {
   const d = new Date(); d.setDate(d.getDate() - 90);
@@ -100,10 +100,13 @@ export default function DashboardPage() {
               <Filter className="h-4 w-4" />
               <span className="font-medium">Filter by Date:</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" data-testid="dash-start-date" max={getToday()} />
-              <span className="text-slate-400">to</span>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" data-testid="dash-end-date" max={getToday()} />
+            <div className="w-64">
+              <DateRangePicker
+                startDate={startDate}
+                endDate={endDate}
+                onChange={({ startDate: s, endDate: e }) => { setStartDate(s); setEndDate(e); }}
+                maxDate={getToday()}
+              />
             </div>
             <Button size="sm" onClick={() => { setLoading(true); fetchDashboardData(); }} data-testid="dash-apply-filter">
               Apply

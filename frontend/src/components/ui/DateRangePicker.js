@@ -181,7 +181,9 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
   const CalendarPanel = (
     <div
       ref={panelRef}
-      className="bg-white rounded-xl shadow-2xl border border-slate-200 p-3 max-w-[calc(100vw-1.5rem)] overflow-hidden"
+      className={`bg-white rounded-xl border border-slate-200 max-w-[calc(100vw-1.5rem)] overflow-hidden ${
+        isMobile ? 'shadow-2xl p-3' : 'shadow-lg p-3 w-[560px]'
+      }`}
       data-testid="date-range-calendar"
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
@@ -199,30 +201,37 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
           </button>
         </div>
       )}
-      {FromToChips}
-      <p className="text-[10px] text-muted-ink mb-2 text-center">
-        {isMobile
-          ? (activeSide === 'from'
-              ? 'Pick the start date below'
-              : 'Now pick the end date — use < > or year dropdown to navigate')
-          : <>Tap <strong>start</strong> date, then tap <strong>end</strong> date</>}
-      </p>
+      {isMobile && FromToChips}
+      {isMobile && (
+        <p className="text-[10px] text-muted-ink mb-2 text-center">
+          {activeSide === 'from'
+            ? 'Pick the start date below'
+            : 'Now pick the end date — use < > or year dropdown to navigate'}
+        </p>
+      )}
       <DayPicker
         mode="range"
         selected={range}
         onSelect={handleSelect}
         {...(isMobile
           ? { month: displayMonth, onMonthChange: setDisplayMonth, captionLayout: 'dropdown-buttons', fromYear: 2015, toYear: today.getFullYear() }
-          : { defaultMonth: range.from || subDays(new Date(), 30) })}
+          : { defaultMonth: range.from || subDays(new Date(), 30), weekStartsOn: 1 })}
         numberOfMonths={isMobile ? 1 : 2}
         disabled={{ after: today }}
-        showOutsideDays
-        modifiersStyles={{
+        showOutsideDays={isMobile}
+        modifiersClassNames={isMobile ? undefined : {
+          range_start: 'drp-range-start',
+          range_end: 'drp-range-end',
+          range_middle: 'drp-range-middle',
+          selected: 'drp-selected',
+          disabled: 'drp-disabled',
+        }}
+        modifiersStyles={isMobile ? {
           selected: { backgroundColor: '#059669', color: 'white' },
           range_middle: { backgroundColor: '#d1fae5', color: '#064e3b' },
           today: { fontWeight: 'bold', border: '2px solid #059669' }
-        }}
-        styles={{
+        } : undefined}
+        styles={isMobile ? {
           months: { display: 'flex', gap: '1rem', flexWrap: 'wrap' },
           caption: { display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', padding: '0.5rem 0' },
           caption_label: { fontSize: '0.875rem', fontWeight: '600', color: '#1e293b' },
@@ -230,6 +239,14 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
           head_cell: { fontSize: '0.75rem', fontWeight: '500', color: '#64748b', width: '36px', textAlign: 'center', padding: '0.25rem' },
           cell: { width: '36px', height: '36px', textAlign: 'center', padding: '1px' },
           day: { width: '34px', height: '34px', fontSize: '0.8rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+        } : {
+          months: { display: 'flex', gap: '1.5rem', flexWrap: 'nowrap' },
+          caption: { display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', padding: '0.25rem 0 0.5rem' },
+          caption_label: { fontSize: '0.875rem', fontWeight: '500', color: '#475569' },
+          nav_button: { width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', border: 'none', cursor: 'pointer', color: '#94a3b8' },
+          head_cell: { fontSize: '0.7rem', fontWeight: '500', color: '#94a3b8', width: '34px', textAlign: 'center', padding: '0.25rem 0', textTransform: 'capitalize' },
+          cell: { width: '34px', height: '32px', textAlign: 'center', padding: '0' },
+          day: { width: '34px', height: '32px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#334155', border: 'none', background: 'transparent' },
         }}
       />
       <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 mt-2">
@@ -304,7 +321,14 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
       )}
 
       {open && !isMobile && (
-        <div className="absolute z-50 mt-1 right-0">
+        <div className={`absolute z-50 mt-1 ${
+          // Auto-flip: if trigger is in the left half of viewport, anchor left; otherwise right.
+          (() => {
+            const rect = containerRef.current?.getBoundingClientRect();
+            const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1024;
+            return rect && rect.left < viewportW / 2 ? 'left-0' : 'right-0';
+          })()
+        }`}>
           {CalendarPanel}
         </div>
       )}

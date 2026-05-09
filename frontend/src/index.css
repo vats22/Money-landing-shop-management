@@ -153,3 +153,44 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 /* Hide scrollbar but keep functionality (used for tab strips) */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* === Desktop DateRangePicker — continuous range pill (matches reference) === */
+@media (min-width: 640px) {
+  /* Disabled (future) days — strikethrough, muted, not clickable visually */
+  .rdp .drp-disabled {
+    color: #cbd5e1 !important;
+    text-decoration: line-through;
+    cursor: not-allowed;
+    background: transparent !important;
+  }
+  /* Range middle — light gray pill that fills the cell */
+  .rdp .rdp-day.drp-range-middle {
+    background-color: #eef2f7 !important;
+    color: #334155 !important;
+    border-radius: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+  /* Range start / end — blue circle that visually anchors the pill */
+  .rdp .rdp-day.drp-range-start,
+  .rdp .rdp-day.drp-range-end {
+    background-color: #2563eb !important;
+    color: #ffffff !important;
+    width: 100% !important;
+    height: 100% !important;
+    font-weight: 600;
+  }
+  .rdp .rdp-day.drp-range-start { border-radius: 9999px 0 0 9999px !important; }
+  .rdp .rdp-day.drp-range-end { border-radius: 0 9999px 9999px 0 !important; }
+  /* When a single day is both start AND end, give it a full circle */
+  .rdp .rdp-day.drp-range-start.drp-range-end { border-radius: 9999px !important; }
+  /* Hover for non-selected, non-disabled days */
+  .rdp .rdp-day:not(.drp-disabled):not(.drp-range-start):not(.drp-range-end):not(.drp-range-middle):hover {
+    background-color: #f1f5f9;
+    border-radius: 9999px;
+  }
+  /* Remove default rdp focus ring/outline that conflicts with the pill */
+  .rdp .rdp-day:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; border-radius: 4px; }
+  /* No padding between cells so the pill is continuous */
+  .rdp tbody td { padding: 0 !important; }
+}
