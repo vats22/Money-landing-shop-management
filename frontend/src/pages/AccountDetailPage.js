@@ -549,6 +549,7 @@ export default function AccountDetailPage() {
                                             <thead className="bg-gradient-to-r from-slate-50 to-slate-100">
                                               <tr>
                                                 <th className="px-3 py-2.5 text-left text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Landed Date</th>
+                                                <th className="px-3 py-2.5 text-left text-slate-600 font-semibold uppercase tracking-wider text-[10px]" title="Date from which this period's interest starts (resets after a full-interest payment)">Interest Start</th>
                                                 <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Principal</th>
                                                 <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Rate</th>
                                                 <th className="px-3 py-2.5 text-right text-slate-600 font-semibold uppercase tracking-wider text-[10px]">Days</th>
@@ -563,6 +564,7 @@ export default function AccountDetailPage() {
                                               {entry.breakdown.map((b, bi) => (
                                                 <tr key={bi} className="hover:bg-slate-50/70 transition-colors">
                                                   <td className="px-3 py-2.5 text-slate-700 font-medium">{formatDate(b.landed_date)}</td>
+                                                  <td className="px-3 py-2.5 text-slate-700">{formatDate(b.interest_start_date || b.landed_date)}</td>
                                                   <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">{formatCurrency(b.principal)}</td>
                                                   <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">{b.rate}%</td>
                                                   <td className="px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">{b.days}</td>

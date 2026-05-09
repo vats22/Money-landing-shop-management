@@ -19,9 +19,9 @@ ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/h
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
-def init_storage():
+def init_storage(force: bool = False):
     global storage_key
-    if storage_key:
+    if storage_key and not force:
         return storage_key
     resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
     resp.raise_for_status()
@@ -31,23 +31,48 @@ def init_storage():
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
     key = init_storage()
-    resp = requests.put(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type},
-        data=data, timeout=120
-    )
-    resp.raise_for_status()
-    return resp.json()
+    try:
+        resp = requests.put(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key, "Content-Type": content_type},
+            data=data, timeout=120
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.HTTPError as e:
+        # Retry once with a fresh key on auth failures
+        if e.response is not None and e.response.status_code in (401, 403):
+            key = init_storage(force=True)
+            resp = requests.put(
+                f"{STORAGE_URL}/objects/{path}",
+                headers={"X-Storage-Key": key, "Content-Type": content_type},
+                data=data, timeout=120
+            )
+            resp.raise_for_status()
+            return resp.json()
+        raise
 
 
 def get_object(path: str):
     key = init_storage()
-    resp = requests.get(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key}, timeout=60
-    )
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+    try:
+        resp = requests.get(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key}, timeout=60
+        )
+        resp.raise_for_status()
+        return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+    except requests.HTTPError as e:
+        # Retry once with a fresh key on auth failures
+        if e.response is not None and e.response.status_code in (401, 403):
+            key = init_storage(force=True)
+            resp = requests.get(
+                f"{STORAGE_URL}/objects/{path}",
+                headers={"X-Storage-Key": key}, timeout=60
+            )
+            resp.raise_for_status()
+            return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+        raise
 
 
 @router.post("/accounts/{account_id}/jewellery/{item_index}/images")
@@ -148,6 +173,18 @@ async def serve_file(
 
     try:
         data, content_type = get_object(path)
-        return Response(content=data, media_type=content_type)
+        # Cache for an hour at the browser level - file content is immutable per ID
+        return Response(
+            content=data,
+            media_type=content_type,
+            headers={"Cache-Control": "private, max-age=3600"}
+        )
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else 502
+        if status == 404:
+            raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=502, detail=f"Storage upstream error: {status}")
     except Exception as e:
-        raise HTTPException(status_code=404, detail="File not found")
+        import logging
+        logging.exception("Image fetch failed for path=%s", path)
+        raise HTTPException(status_code=502, detail=f"Image fetch failed: {str(e)[:120]}")

@@ -3,6 +3,17 @@ from typing import List
 from config import ledger_collection
 
 
+def _remaining_principal(entry: dict) -> float:
+    """Return remaining_principal respecting 0.0 (don't fall back to amount when fully paid)."""
+    rp = entry.get("remaining_principal")
+    if rp is None:
+        rp = entry.get("amount", 0)
+    try:
+        return float(rp or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _entry_existed_at_payment(entry: dict, payment_date: datetime) -> bool:
     """Check if a landed entry existed on or before the payment date"""
     entry_date_str = entry.get("date", "")
@@ -35,7 +46,7 @@ def calculate_interest_for_entry(landed_entry: dict, calc_date: datetime) -> dic
         if calc_date.tzinfo is None:
             calc_date = calc_date.replace(tzinfo=timezone.utc)
 
-        remaining_principal = float(landed_entry.get("remaining_principal") or landed_entry.get("amount", 0) or 0)
+        remaining_principal = _remaining_principal(landed_entry)
         if remaining_principal <= 0:
             return {"interest": 0.0, "days": 0, "interest_start_date": interest_start_date_str}
 
@@ -72,13 +83,11 @@ def calculate_account_totals(account: dict) -> dict:
 
     total_pending_principal = 0.0
     for entry in account.get("landed_entries", []):
-        remaining = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
-        total_pending_principal += remaining
+        total_pending_principal += _remaining_principal(entry)
 
     total_pending_interest = 0.0
     for entry in account.get("landed_entries", []):
-        remaining_principal = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
-        if remaining_principal > 0:
+        if _remaining_principal(entry) > 0:
             total_pending_interest += get_total_interest_for_entry(entry, now)
 
     total_jewellery_weight = sum(float(item.get("weight", 0) or 0) for item in account.get("jewellery_items", []))
@@ -111,7 +120,7 @@ def process_payment(landed_entries: List[dict], payment_amount: float, payment_d
         if not _entry_existed_at_payment(entry, payment_date):
             entry_interests.append(0.0)
             continue
-        remaining_principal = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
+        remaining_principal = _remaining_principal(entry)
         if remaining_principal > 0:
             entry_interest = get_total_interest_for_entry(entry, payment_date)
             entry_interests.append(entry_interest)
@@ -131,7 +140,7 @@ def process_payment(landed_entries: List[dict], payment_amount: float, payment_d
                 break
             if not _entry_existed_at_payment(entry, payment_date):
                 continue
-            remaining_principal = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
+            remaining_principal = _remaining_principal(entry)
             if remaining_principal > 0:
                 principal_payment = min(remaining_payment, remaining_principal)
                 entry["remaining_principal"] = remaining_principal - principal_payment
@@ -144,7 +153,7 @@ def process_payment(landed_entries: List[dict], payment_amount: float, payment_d
             for i, entry in enumerate(landed_entries):
                 if not _entry_existed_at_payment(entry, payment_date):
                     continue
-                remaining_principal = float(entry.get("remaining_principal") or entry.get("amount", 0) or 0)
+                remaining_principal = _remaining_principal(entry)
                 if remaining_principal > 0 and entry_interests[i] > 0:
                     proportion = entry_interests[i] / total_interest_due
                     entry_remaining_interest = remaining_interest_after_payment * proportion

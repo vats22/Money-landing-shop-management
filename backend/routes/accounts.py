@@ -164,32 +164,43 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
             if isinstance(item, dict) and item.get("name") and item.get("weight"):
                 jewellery_items.append({"name": item["name"], "weight": float(item["weight"])})
         update_data["jewellery_items"] = jewellery_items
-    if "landed_entries" in update_data:
-        landed_entries = []
-        for entry in update_data["landed_entries"]:
-            if isinstance(entry, dict) and entry.get("date") and entry.get("amount"):
+
+    # Whether landed/received entries are being modified in this request.
+    # If neither is touched, do NOT reset/reprocess existing entries (was corrupting paid-off state).
+    landed_in_payload = "landed_entries" in update_data
+    received_in_payload = "received_entries" in update_data
+
+    if landed_in_payload or received_in_payload:
+        # Build the working landed list
+        if landed_in_payload:
+            landed_entries = []
+            for entry in update_data["landed_entries"]:
+                if isinstance(entry, dict) and entry.get("date") and entry.get("amount"):
+                    landed_entries.append({
+                        "date": entry["date"], "amount": float(entry["amount"]),
+                        "interest_rate": float(entry.get("interest_rate", 2)),
+                        "remaining_principal": float(entry["amount"]),
+                        "interest_start_date": entry["date"], "carried_forward_interest": 0.0
+                    })
+        else:
+            # Received changed but landed not — start landed fresh from existing amounts and reprocess all
+            landed_entries = []
+            for entry in (existing.get("landed_entries") or []):
                 landed_entries.append({
                     "date": entry["date"], "amount": float(entry["amount"]),
                     "interest_rate": float(entry.get("interest_rate", 2)),
                     "remaining_principal": float(entry["amount"]),
                     "interest_start_date": entry["date"], "carried_forward_interest": 0.0
                 })
-        update_data["landed_entries"] = landed_entries
-    else:
-        landed_entries = existing.get("landed_entries", [])
-        for entry in landed_entries:
-            entry["remaining_principal"] = float(entry["amount"])
-            entry["interest_start_date"] = entry["date"]
-            entry["carried_forward_interest"] = 0.0
-        update_data["landed_entries"] = landed_entries
-    if "received_entries" in update_data:
-        landed_entries = update_data["landed_entries"]
+
+        # Reprocess received against landed
+        raw_received = update_data.get("received_entries") if received_in_payload else (existing.get("received_entries") or [])
         received_entries = []
-        raw_received = sorted(
-            [e for e in update_data["received_entries"] if isinstance(e, dict) and e.get("date") and e.get("amount")],
+        sorted_received = sorted(
+            [e for e in raw_received if isinstance(e, dict) and e.get("date") and e.get("amount")],
             key=lambda x: x["date"]
         )
-        for recv_entry in raw_received:
+        for recv_entry in sorted_received:
             payment_date = datetime.fromisoformat(recv_entry["date"])
             payment_amount = float(recv_entry["amount"])
             landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
@@ -200,19 +211,57 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
                 "principal_paid": principal_paid, "interest_paid": interest_paid,
                 "remaining_interest": remaining_interest
             })
-        update_data["received_entries"] = received_entries
         update_data["landed_entries"] = landed_entries
+        update_data["received_entries"] = received_entries
+    # else: leave landed_entries/received_entries on existing doc unchanged
+
     user_name = f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get('username')
     update_data["updated_at"] = datetime.now(timezone.utc)
     update_data["updated_by"] = str(current_user["_id"])
     update_data["updated_by_name"] = user_name
-    await accounts_collection.update_one({"_id": ObjectId(account_id)}, {"$set": update_data})
+
+    # Bug fix: when status is changed to "closed" via the form's status dropdown,
+    # mirror the dedicated /close endpoint behavior so it appears in the History tab.
+    push_ops = {}
+    new_status = update_data.get("status")
+    if new_status == "closed" and existing.get("status") != "closed":
+        temp_account = {**existing, **update_data}
+        close_totals = calculate_account_totals(temp_account)
+        close_date = datetime.now(timezone.utc)
+        close_entry = {
+            "closed_at": close_date.isoformat(),
+            "closed_by": str(current_user["_id"]),
+            "closed_by_name": user_name,
+            "remarks": "Closed via status dropdown",
+            "final_pending_amount": close_totals["total_pending_amount"],
+            "final_pending_interest": close_totals["total_pending_interest"]
+        }
+        update_data["closed_at"] = close_date
+        update_data["closed_by"] = str(current_user["_id"])
+        update_data["closed_by_name"] = user_name
+        update_data["close_remarks"] = close_entry["remarks"]
+        update_data["final_pending_amount"] = close_totals["total_pending_amount"]
+        update_data["final_pending_interest"] = close_totals["total_pending_interest"]
+        push_ops["close_history"] = close_entry
+
+    mongo_update = {"$set": update_data}
+    if push_ops:
+        mongo_update["$push"] = push_ops
+    await accounts_collection.update_one({"_id": ObjectId(account_id)}, mongo_update)
     await ledger_collection.delete_many({"account_id": account_id})
     updated_account = await accounts_collection.find_one({"_id": ObjectId(account_id)})
     await generate_chronological_ledger(
         account_id, updated_account.get("landed_entries", []),
         updated_account.get("received_entries", []), str(current_user["_id"])
     )
+    # If we just closed via dropdown, append a CLOSED ledger entry too (parity with /close endpoint)
+    if push_ops.get("close_history"):
+        ce = push_ops["close_history"]
+        await create_ledger_entry(
+            account_id, "CLOSED", 0, 0, 0, ce["final_pending_amount"],
+            str(current_user["_id"]), ce["closed_at"],
+            remaining_interest=0.0, remaining_principal=ce["final_pending_amount"]
+        )
     totals = calculate_account_totals(updated_account)
     response = serialize_doc(updated_account)
     response.update(totals)
@@ -445,6 +494,7 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
                 "computed_balance": round(running_principal + running_interest, 2),
                 "breakdown": [{
                     "landed_date": le["date"],
+                    "interest_start_date": le["interest_start_date"],
                     "principal": round(le["original_amount"], 2),
                     "rate": le["rate"],
                     "days": 0,
@@ -483,6 +533,7 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
             interest_due = round(calc_int + le["carried_forward_interest"], 2)
             breakdown.append({
                 "landed_date": le["date"],
+                "interest_start_date": le["interest_start_date"],
                 "principal": round(le["remaining_principal"], 2),
                 "rate": le["rate"],
                 "days": days,
@@ -604,7 +655,16 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
 
     for ev in events:
         try:
-            ev["_sort"] = datetime.fromisoformat(ev["date"].replace("Z", "+00:00"))
+            d = ev["date"]
+            if isinstance(d, str):
+                if d.endswith("Z"):
+                    d = d[:-1] + "+00:00"
+                parsed = datetime.fromisoformat(d)
+            else:
+                parsed = d
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            ev["_sort"] = parsed
         except Exception:
             ev["_sort"] = datetime.now(timezone.utc)
 
