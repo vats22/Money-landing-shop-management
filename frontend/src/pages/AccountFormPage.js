@@ -74,6 +74,8 @@ export default function AccountFormPage() {
   // UI state for "+ Add note" expand on each entry row
   const [openLandedNote, setOpenLandedNote] = useState({});
   const [openReceivedNote, setOpenReceivedNote] = useState({});
+  // Mobile stepper (Account → Jewellery → Landed → Received)
+  const [mobileStep, setMobileStep] = useState(0);
 
   // Image modal state
   const MAX_IMAGES = 5;
@@ -448,38 +450,75 @@ export default function AccountFormPage() {
     );
   }
 
+  // Mobile stepper config
+  const mobileSteps = [
+    { id: 0, label: 'Account', short: 'Account' },
+    { id: 1, label: 'Jewellery', short: 'Items' },
+    { id: 2, label: 'Lent', short: 'Lent' },
+    { id: 3, label: 'Received', short: 'Recd' },
+  ];
+  const stepCls = (i) => `block lg:block ${mobileStep === i ? '' : 'hidden lg:block'}`;
+
   return (
-    <div className="space-y-6 animate-fadeIn max-w-5xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 animate-fadeIn max-w-5xl mx-auto pb-24 lg:pb-0">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         <button
+          type="button"
           onClick={() => navigate(-1)}
-          className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-slate-100 rounded-lg transition-colors tap-target"
+          aria-label="Back"
         >
-          <ArrowLeft className="h-5 w-5 text-slate-600" />
+          <ArrowLeft className="h-5 w-5 text-secondary-ink" />
         </button>
-        <div>
-          <h1 className="text-2xl font-bold font-display text-slate-900">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl sm:text-2xl font-bold font-display text-primary-ink truncate">
             {isEdit ? 'Edit Account' : 'New Account'}
           </h1>
           {isEdit && accountInfo ? (
-            <div className="flex items-center gap-3 mt-1">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-sm font-medium rounded-lg border border-emerald-200" data-testid="edit-account-number">
-                <FileText className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-lg border border-emerald-200" data-testid="edit-account-number">
+                <FileText className="h-3 w-3" />
                 {accountInfo.account_number}
               </span>
-              <span className="text-sm text-slate-600" data-testid="edit-account-name">{accountInfo.name}</span>
+              <span className="text-xs sm:text-sm text-secondary-ink truncate" data-testid="edit-account-name">{accountInfo.name}</span>
             </div>
           ) : (
-            <p className="text-slate-500 mt-1">
+            <p className="text-xs sm:text-sm text-secondary-ink mt-1">
               {isEdit ? 'Update account details' : 'Create a new lending account'}
             </p>
           )}
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Mobile stepper */}
+      <div className="lg:hidden">
+        <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 p-2">
+          {mobileSteps.map((s, idx) => (
+            <React.Fragment key={s.id}>
+              <button
+                type="button"
+                onClick={() => setMobileStep(s.id)}
+                className={`flex-1 flex flex-col items-center justify-center py-1.5 rounded-lg transition-colors tap-target ${
+                  mobileStep === s.id ? 'bg-emerald-600 text-white' : 'text-secondary-ink hover:bg-slate-50'
+                }`}
+                data-testid={`step-${s.id}`}
+              >
+                <span className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${
+                  mobileStep === s.id ? 'bg-white/20 text-white' :
+                  mobileStep > s.id ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}>{s.id + 1}</span>
+                <span className="text-[10px] mt-0.5 font-medium">{s.short}</span>
+              </button>
+              {idx < mobileSteps.length - 1 && <div className={`h-0.5 w-2 ${mobileStep > idx ? 'bg-emerald-300' : 'bg-slate-200'}`} />}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         {/* Basic Details */}
+        <div className={stepCls(0)}>
         <Card>
           <CardHeader>
             <CardTitle>Basic Details</CardTitle>
@@ -562,8 +601,10 @@ export default function AccountFormPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
 
         {/* Jewellery Items */}
+        <div className={stepCls(1)}>
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -642,8 +683,10 @@ export default function AccountFormPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
 
         {/* Landed Entries */}
+        <div className={stepCls(2)}>
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -751,8 +794,10 @@ export default function AccountFormPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
 
         {/* Received Entries */}
+        <div className={stepCls(3)}>
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -850,9 +895,32 @@ export default function AccountFormPage() {
             )}
           </CardContent>
         </Card>
+        </div>
 
-        {/* Submit */}
-        <div className="flex justify-end gap-4">
+        {/* Mobile stepper navigation (Prev/Next) */}
+        <div className="lg:hidden flex items-center gap-2">
+          {mobileStep > 0 ? (
+            <Button type="button" variant="outline" onClick={() => setMobileStep(s => s - 1)} className="flex-1 tap-target" data-testid="step-prev">
+              <ArrowLeft className="h-4 w-4 mr-1.5" /> Previous
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1 tap-target">
+              Cancel
+            </Button>
+          )}
+          {mobileStep < 3 ? (
+            <Button type="button" onClick={() => setMobileStep(s => s + 1)} className="flex-1 tap-target" data-testid="step-next">
+              Next →
+            </Button>
+          ) : (
+            <Button type="submit" disabled={saving} data-testid="save-account-btn-mobile" className="flex-1 tap-target">
+              {saving ? <Spinner size="sm" className="text-white" /> : (isEdit ? 'Update' : 'Create')}
+            </Button>
+          )}
+        </div>
+
+        {/* Desktop submit row */}
+        <div className="hidden lg:flex justify-end gap-3">
           <Button type="button" variant="outline" onClick={() => navigate(-1)}>
             Cancel
           </Button>

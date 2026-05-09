@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -219,9 +220,10 @@ export default function AccountsPage() {
       {/* Mobile filter trigger */}
       <div className="lg:hidden flex items-center gap-2">
         <button
+          type="button"
           onClick={() => setShowFilterSheet(true)}
           data-testid="open-filter-sheet"
-          className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 border border-slate-300 bg-white text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 tap-target"
+          className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 border border-slate-300 bg-white text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 active:bg-slate-100 tap-target"
         >
           <SlidersHorizontal className="h-4 w-4" />
           Filters {(villageFilter.length + (statusFilter ? 1 : 0) + (search ? 1 : 0)) > 0 && (
@@ -243,91 +245,84 @@ export default function AccountsPage() {
         </Button>
       </div>
 
-      {/* Desktop filters */}
-      <Card className="hidden lg:block">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="h-5 w-5 text-secondary-ink" />
-              Filters
-            </CardTitle>
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
-              <X className="h-4 w-4 mr-1" />
-              Clear
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="w-56">
-              <Input
-                data-testid="search-input"
-                placeholder="Search name / account #"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              />
-            </div>
-            <div className="w-52">
-              <MultiSelectDropdown
-                options={villages}
-                value={villageFilter}
-                onChange={setVillageFilter}
-                placeholder="All Villages"
-                searchPlaceholder="Search village..."
-                testId="village-filter"
-              />
-            </div>
-            <div className="w-36">
-              <Select
-                data-testid="status-filter"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="">All Status</option>
-                <option value="continue">Continue</option>
-                <option value="closed">Closed</option>
-                <option value="renewed">Renewed</option>
-                <option value="immediate action needed">Immediate Action Needed</option>
-              </Select>
-            </div>
-            <div className="w-64">
-              <DateRangePicker
-                startDate={startDate}
-                endDate={endDate}
-                onChange={({ startDate: s, endDate: e }) => { setStartDate(s); setEndDate(e); }}
-                maxDate={getToday()}
-              />
-            </div>
-            <Button onClick={handleSearch} data-testid="apply-filters-btn">
-              <Search className="h-4 w-4 mr-2" />
-              Apply Filters
-            </Button>
-            <div className="ml-auto inline-flex rounded-lg border border-slate-200 bg-white p-0.5" role="group" aria-label="Density">
-              <button
-                onClick={() => { setDensity('comfortable'); localStorage.setItem('lendledger_density','comfortable'); }}
-                className={`px-3 py-1.5 text-xs rounded-md ${density==='comfortable' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                data-testid="density-comfortable"
-              >Comfortable</button>
-              <button
-                onClick={() => { setDensity('compact'); localStorage.setItem('lendledger_density','compact'); }}
-                className={`px-3 py-1.5 text-xs rounded-md ${density==='compact' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                data-testid="density-compact"
-              >Compact</button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Desktop filters - compact single row */}
+      <div className="hidden lg:flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-ink pointer-events-none" />
+          <Input
+            data-testid="search-input"
+            placeholder="Search name / account #"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="pl-9 h-9"
+          />
+        </div>
+        <div className="w-44">
+          <MultiSelectDropdown
+            options={villages}
+            value={villageFilter}
+            onChange={setVillageFilter}
+            placeholder="All Villages"
+            searchPlaceholder="Search village..."
+            testId="village-filter"
+          />
+        </div>
+        <div className="w-36">
+          <Select
+            data-testid="status-filter"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-9"
+          >
+            <option value="">All Status</option>
+            <option value="continue">Continue</option>
+            <option value="closed">Closed</option>
+            <option value="renewed">Renewed</option>
+            <option value="immediate action needed">Action Needed</option>
+          </Select>
+        </div>
+        <div className="w-56">
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onChange={({ startDate: s, endDate: e }) => { setStartDate(s); setEndDate(e); }}
+            maxDate={getToday()}
+          />
+        </div>
+        <Button onClick={handleSearch} data-testid="apply-filters-btn" size="sm" className="h-9">
+          <Search className="h-4 w-4 mr-1.5" /> Apply
+        </Button>
+        <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 text-secondary-ink">
+          <X className="h-4 w-4 mr-1" /> Clear
+        </Button>
+        <div className="ml-auto inline-flex rounded-lg border border-slate-200 bg-white p-0.5" role="group" aria-label="Density">
+          <button
+            type="button"
+            onClick={() => { setDensity('comfortable'); localStorage.setItem('lendledger_density','comfortable'); }}
+            className={`px-2.5 py-1 text-[11px] rounded-md ${density==='comfortable' ? 'bg-emerald-600 text-white' : 'text-secondary-ink hover:bg-slate-50'}`}
+            data-testid="density-comfortable"
+            title="Comfortable rows"
+          >Cozy</button>
+          <button
+            type="button"
+            onClick={() => { setDensity('compact'); localStorage.setItem('lendledger_density','compact'); }}
+            className={`px-2.5 py-1 text-[11px] rounded-md ${density==='compact' ? 'bg-emerald-600 text-white' : 'text-secondary-ink hover:bg-slate-50'}`}
+            data-testid="density-compact"
+            title="Compact rows"
+          >Compact</button>
+        </div>
+      </div>
 
-      {/* Mobile filter bottom sheet */}
-      {showFilterSheet && (
-        <div className="fixed inset-0 z-50 lg:hidden" data-testid="filter-sheet">
-          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setShowFilterSheet(false)} />
+      {/* Mobile filter bottom sheet (portal) */}
+      {showFilterSheet && createPortal(
+        <div className="fixed inset-0 z-[100] lg:hidden" data-testid="filter-sheet">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm animate-fadeIn" onClick={() => setShowFilterSheet(false)} />
           <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl max-h-[85vh] overflow-y-auto safe-bottom animate-slideUp">
             <div className="sticky top-0 bg-white px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <div className="w-10 h-1 rounded-full bg-slate-300 absolute left-1/2 -translate-x-1/2 -top-2" />
               <h3 className="text-base font-semibold text-primary-ink">Filters</h3>
-              <button onClick={clearFilters} className="text-xs text-secondary-ink hover:text-slate-900">Reset</button>
+              <button type="button" onClick={clearFilters} className="text-xs text-secondary-ink hover:text-slate-900 tap-target px-2 py-1">Reset</button>
             </div>
             <div className="p-4 space-y-4">
               <div>
@@ -380,7 +375,8 @@ export default function AccountsPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Content */}

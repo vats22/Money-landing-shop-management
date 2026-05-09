@@ -18,6 +18,7 @@ import {
   StickyNote
 } from 'lucide-react';
 import NotePreview from '../components/ui/NotePreview';
+import LedgerCard from '../components/ui/LedgerCard';
 
 const getToday = () => new Date().toISOString().split('T')[0];
 const MAX_IMAGES = 5;
@@ -206,56 +207,58 @@ export default function AccountDetailPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <Card className="border-l-4 border-l-emerald-500">
-          <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Total Landed</p>
-            <p className="text-lg font-bold font-mono text-emerald-700 mt-1 tabular-nums">{formatCurrency(account.total_landed_amount)}</p>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-muted-ink uppercase tracking-wide">Total Landed</p>
+            <p className="text-base sm:text-lg font-bold font-mono text-success-ink mt-1 tabular-nums">{formatCurrency(account.total_landed_amount)}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Total Received</p>
-            <p className="text-lg font-bold font-mono text-blue-700 mt-1 tabular-nums">{formatCurrency(account.total_received_amount)}</p>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-muted-ink uppercase tracking-wide">Total Received</p>
+            <p className="text-base sm:text-lg font-bold font-mono text-info-ink mt-1 tabular-nums">{formatCurrency(account.total_received_amount)}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Pending Principal</p>
-            <p className="text-lg font-bold font-mono text-amber-700 mt-1 tabular-nums">{formatCurrency(account.total_pending_amount)}</p>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-muted-ink uppercase tracking-wide">Pending Principal</p>
+            <p className="text-base sm:text-lg font-bold font-mono text-warning-ink mt-1 tabular-nums">{formatCurrency(account.total_pending_amount)}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-red-500">
-          <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Pending Interest</p>
-            <p className="text-lg font-bold font-mono text-red-600 mt-1 tabular-nums">{formatCurrency(account.total_pending_interest)}</p>
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-muted-ink uppercase tracking-wide">Pending Interest</p>
+            <p className="text-base sm:text-lg font-bold font-mono text-danger-ink mt-1 tabular-nums">{formatCurrency(account.total_pending_interest)}</p>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-purple-500" data-testid="total-pending-card">
-          <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Total Pending</p>
-            <p className="text-lg font-bold font-mono text-purple-700 mt-1 tabular-nums">{formatCurrency((account.total_pending_amount || 0) + (account.total_pending_interest || 0))}</p>
+        <Card className="border-l-4 border-l-purple-500 col-span-2 md:col-span-1" data-testid="total-pending-card">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] sm:text-xs text-muted-ink uppercase tracking-wide">Total Pending</p>
+            <p className="text-base sm:text-lg font-bold font-mono text-purple-700 mt-1 tabular-nums">{formatCurrency((account.total_pending_amount || 0) + (account.total_pending_interest || 0))}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            data-testid={`tab-${tab.id}`}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              activeTab === tab.id
-                ? 'border-emerald-600 text-emerald-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-          </button>
-        ))}
+      {/* Tabs - sticky on mobile */}
+      <div className="sticky top-0 z-20 -mx-4 sm:mx-0 bg-slate-50/95 backdrop-blur-sm">
+        <div className="flex gap-1 border-b border-slate-200 overflow-x-auto px-4 sm:px-0 no-scrollbar">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              data-testid={`tab-${tab.id}`}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors tap-target ${
+                activeTab === tab.id
+                  ? 'border-emerald-600 text-emerald-700'
+                  : 'border-transparent text-secondary-ink hover:text-primary-ink'
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab Content */}
@@ -338,9 +341,42 @@ export default function AccountDetailPage() {
           <Card>
             <CardContent className="p-0">
               {(!account.landed_entries?.length) ? (
-                <p className="text-center py-12 text-slate-500">No landed entries</p>
+                <p className="text-center py-12 text-muted-ink">No landed entries</p>
               ) : (
-                <div className="table-container">
+                <>
+                  {/* Mobile card list */}
+                  <div className="lg:hidden p-3 space-y-3">
+                    {account.landed_entries.map((entry, i) => (
+                      <div key={i} className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">#{i+1}</span>
+                            <span className="text-xs text-secondary-ink">{formatDate(entry.date)}</span>
+                          </div>
+                          <NotePreview html={entry.note} testId={`landed-note-mobile-${i}`} />
+                        </div>
+                        <div className="flex items-baseline justify-between mb-2">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-ink">Amount</p>
+                            <p className="text-base font-bold tabular-nums text-success-ink">{formatCurrency(entry.amount)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-ink">Rate</p>
+                            <p className="text-base font-bold tabular-nums text-primary-ink">{entry.interest_rate}%</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Remaining</p><p className="tabular-nums font-semibold text-warning-ink">{formatCurrency(entry.remaining_principal)}</p></div>
+                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Total Interest</p><p className="tabular-nums font-semibold text-danger-ink">{formatCurrency(entry.total_interest)}</p></div>
+                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Interest Start</p><p className="text-primary-ink">{formatDate(entry.interest_start_date)}</p></div>
+                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Days</p><p className="tabular-nums text-primary-ink">{entry.days}</p></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden lg:block table-container">
                   <table className="w-full min-w-[900px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
@@ -367,7 +403,8 @@ export default function AccountDetailPage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -378,9 +415,34 @@ export default function AccountDetailPage() {
           <Card>
             <CardContent className="p-0">
               {(!account.received_entries?.length) ? (
-                <p className="text-center py-12 text-slate-500">No received entries</p>
+                <p className="text-center py-12 text-muted-ink">No received entries</p>
               ) : (
-                <div className="table-container">
+                <>
+                  {/* Mobile card list */}
+                  <div className="lg:hidden p-3 space-y-3">
+                    {account.received_entries.map((entry, i) => (
+                      <div key={i} className="rounded-xl border border-blue-200 bg-blue-50/40 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">#{i+1}</span>
+                            <span className="text-xs text-secondary-ink">{formatDate(entry.date)}</span>
+                          </div>
+                          <NotePreview html={entry.note} testId={`received-note-mobile-${i}`} />
+                        </div>
+                        <div className="mb-2">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-ink">Amount</p>
+                          <p className="text-base font-bold tabular-nums text-info-ink">{formatCurrency(entry.amount)}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Principal Paid</p><p className="tabular-nums font-semibold text-success-ink">{formatCurrency(entry.principal_paid)}</p></div>
+                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Interest Paid</p><p className="tabular-nums font-semibold text-warning-ink">{formatCurrency(entry.interest_paid)}</p></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden lg:block table-container">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
@@ -402,7 +464,8 @@ export default function AccountDetailPage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -432,10 +495,19 @@ export default function AccountDetailPage() {
             )}
             <CardContent className="p-0">
               {ledger.length === 0 ? (
-                <p className="text-center py-12 text-slate-500">No ledger entries</p>
+                <p className="text-center py-12 text-muted-ink">No ledger entries</p>
               ) : (
-                <div className="table-container">
-                  <table className="w-full min-w-[1200px]">
+                <>
+                  {/* Mobile card list */}
+                  <div className="lg:hidden p-3 space-y-3" data-testid="ledger-mobile-list">
+                    {ledger.map((entry, i) => (
+                      <LedgerCard key={i} entry={entry} index={i} />
+                    ))}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden lg:block table-container">
+                    <table className="w-full min-w-[1200px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
                         <th className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
@@ -499,57 +571,25 @@ export default function AccountDetailPage() {
                                         <span className={`w-1.5 h-6 rounded-full ${
                                           isPayment ? 'bg-blue-500' : isLanded ? 'bg-emerald-500' : isClosed ? 'bg-red-500' : 'bg-slate-400'
                                         }`} />
-                                        <h4 className="text-sm font-semibold text-slate-800 tracking-wide">Transaction Details</h4>
-                                        <span className="text-xs text-slate-500">· {formatDate(entry.transaction_date)}</span>
+                                        <h4 className="text-sm font-semibold text-primary-ink tracking-wide">Transaction Details</h4>
+                                        <span className="text-xs text-muted-ink">· {formatDate(entry.transaction_date)}</span>
                                       </div>
                                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                                         isLanded ? 'bg-emerald-100 text-emerald-700' :
                                         isPayment ? 'bg-blue-100 text-blue-700' :
                                         isClosed ? 'bg-red-100 text-red-700' :
                                         isReopened ? 'bg-green-100 text-green-700' :
-                                        'bg-slate-100 text-slate-700'
+                                        'bg-slate-100 text-secondary-ink'
                                       }`}>{entry.transaction_type}</span>
-                                    </div>
-
-                                    {/* Summary stat tiles */}
-                                    <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                                      <div className="rounded-lg bg-slate-50 ring-1 ring-slate-200/60 px-3 py-2">
-                                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Entry Amount</p>
-                                        <p className="text-sm font-mono font-semibold tabular-nums text-slate-800 mt-0.5">{(isClosed || isReopened) ? '-' : formatCurrency(entry.amount)}</p>
-                                      </div>
-                                      <div className="rounded-lg bg-amber-50/70 ring-1 ring-amber-200/60 px-3 py-2">
-                                        <p className="text-[10px] uppercase tracking-wider text-amber-600 font-medium">Interest Charged</p>
-                                        <p className="text-sm font-mono font-semibold tabular-nums text-amber-800 mt-0.5">{entry.interest_charged > 0 ? formatCurrency(entry.interest_charged) : '-'}</p>
-                                      </div>
-                                      <div className="rounded-lg bg-emerald-50/70 ring-1 ring-emerald-200/60 px-3 py-2">
-                                        <p className="text-[10px] uppercase tracking-wider text-emerald-600 font-medium">Interest Paid</p>
-                                        <p className="text-sm font-mono font-semibold tabular-nums text-emerald-800 mt-0.5">{parseFloat(entry.interest_amount || 0) > 0 ? formatCurrency(entry.interest_amount) : '-'}</p>
-                                      </div>
-                                      <div className="rounded-lg bg-red-50/70 ring-1 ring-red-200/60 px-3 py-2">
-                                        <p className="text-[10px] uppercase tracking-wider text-red-600 font-medium">Rem. Interest</p>
-                                        <p className="text-sm font-mono font-semibold tabular-nums text-red-700 mt-0.5">{parseFloat(entry.remaining_interest || 0) > 0 ? formatCurrency(entry.remaining_interest) : '-'}</p>
-                                      </div>
-                                      <div className="rounded-lg bg-blue-50/70 ring-1 ring-blue-200/60 px-3 py-2">
-                                        <p className="text-[10px] uppercase tracking-wider text-blue-600 font-medium">Principal Paid</p>
-                                        <p className="text-sm font-mono font-semibold tabular-nums text-blue-800 mt-0.5">{isLanded ? '-' : (principalPaidVal > 0 ? formatCurrency(principalPaidVal) : '-')}</p>
-                                      </div>
-                                      <div className="rounded-lg bg-slate-50 ring-1 ring-slate-200/60 px-3 py-2">
-                                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Rem. Principal</p>
-                                        <p className="text-sm font-mono font-semibold tabular-nums text-slate-800 mt-0.5">{formatCurrency(entry.remaining_principal)}</p>
-                                      </div>
-                                      <div className="rounded-lg bg-purple-50/70 ring-1 ring-purple-200/60 px-3 py-2 col-span-2 md:col-span-1">
-                                        <p className="text-[10px] uppercase tracking-wider text-purple-600 font-medium">Balance</p>
-                                        <p className="text-sm font-mono font-bold tabular-nums text-purple-800 mt-0.5">{formatCurrency(entry.computed_balance)}</p>
-                                      </div>
                                     </div>
 
                                     {/* Per-entry breakdown for PAYMENT rows */}
                                     {isPayment && Array.isArray(entry.breakdown) && entry.breakdown.length > 0 && (
-                                      <div className="px-5 pb-4">
+                                      <div className="px-5 py-4">
                                         <div className="flex items-center gap-2 mb-2">
-                                          <p className="font-semibold text-slate-700 text-xs uppercase tracking-wider">Interest Breakdown</p>
-                                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full" title="Total Interest = New Interest + Previous Pending (Carry Forward) Interest">
-                                            <span className="text-slate-400">ⓘ</span>
+                                          <p className="font-semibold text-primary-ink text-xs uppercase tracking-wider">Interest Breakdown</p>
+                                          <span className="inline-flex items-center gap-1 text-[10px] text-secondary-ink bg-slate-100 px-2 py-0.5 rounded-full" title="Total Interest = New Interest + Previous Pending (Carry Forward) Interest">
+                                            <span className="text-muted-ink">ⓘ</span>
                                             Total = New + Carry Forward
                                           </span>
                                         </div>
@@ -638,7 +678,8 @@ export default function AccountDetailPage() {
                       })}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
