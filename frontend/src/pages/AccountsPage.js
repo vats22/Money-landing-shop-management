@@ -25,7 +25,7 @@ const FILTER_STORAGE_KEY = 'lendledger_accounts_filters';
 
 const getDefaultStartDate = () => {
   const date = new Date();
-  date.setDate(date.getDate() - 90);
+  date.setDate(date.getDate() - 180);
   return date.toISOString().split('T')[0];
 };
 const getToday = () => new Date().toISOString().split('T')[0];

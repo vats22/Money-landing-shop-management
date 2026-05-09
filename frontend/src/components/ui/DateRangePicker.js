@@ -53,6 +53,14 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
 
   const today = maxDate ? new Date(maxDate + 'T00:00:00') : new Date();
 
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   return (
     <div className="relative" ref={containerRef}>
       <button
@@ -62,22 +70,25 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
         className="flex items-center gap-2 w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm text-left bg-white hover:border-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
       >
         <Calendar className="h-4 w-4 text-slate-400 flex-shrink-0" />
-        <span className={`flex-1 tabular-nums ${range.from ? 'text-slate-800' : 'text-slate-400'}`}>
+        <span className={`flex-1 tabular-nums truncate ${range.from ? 'text-slate-800' : 'text-slate-400'}`}>
           {displayText}
         </span>
         {range.from && (
-          <span onClick={handleClear} className="text-slate-400 hover:text-slate-600">
+          <span onClick={handleClear} className="text-slate-400 hover:text-slate-600 flex-shrink-0">
             <X className="h-3.5 w-3.5" />
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-xl p-3" data-testid="date-range-calendar">
+        <div
+          className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl p-3 overflow-x-auto"
+          data-testid="date-range-calendar"
+        >
           <DayPicker
             mode="range"
             selected={range}
             onSelect={handleSelect}
-            numberOfMonths={2}
+            numberOfMonths={isMobile ? 1 : 2}
             disabled={{ after: today }}
             defaultMonth={range.from || subDays(new Date(), 30)}
             showOutsideDays
@@ -87,7 +98,7 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
               today: { fontWeight: 'bold', border: '2px solid #059669' }
             }}
             styles={{
-              months: { display: 'flex', gap: '1rem' },
+              months: { display: 'flex', gap: '1rem', flexWrap: 'wrap' },
               caption: { display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', padding: '0.5rem 0' },
               caption_label: { fontSize: '0.875rem', fontWeight: '600', color: '#1e293b' },
               nav_button: { width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', border: 'none', cursor: 'pointer' },
@@ -96,12 +107,13 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
               day: { width: '34px', height: '34px', fontSize: '0.8rem', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
             }}
           />
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
-            <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 mt-2">
+            <div className="flex flex-wrap gap-1.5">
               {[
                 { label: '7d', days: 7 },
                 { label: '30d', days: 30 },
                 { label: '90d', days: 90 },
+                { label: '180d', days: 180 },
                 { label: '1y', days: 365 },
               ].map(preset => (
                 <button

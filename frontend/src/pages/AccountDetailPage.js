@@ -23,6 +23,14 @@ import LedgerCard from '../components/ui/LedgerCard';
 const getToday = () => new Date().toISOString().split('T')[0];
 const MAX_IMAGES = 5;
 
+// Tiny stat tile used in mobile entry cards
+const Stat = ({ label, value, valueClass = 'text-primary-ink', mono = false }) => (
+  <div className="bg-slate-50 rounded-md px-2.5 py-1.5">
+    <p className="text-[10px] uppercase tracking-wider text-muted-ink font-medium">{label}</p>
+    <p className={`text-xs ${mono ? 'font-mono tabular-nums' : ''} mt-0.5 ${valueClass}`}>{value}</p>
+  </div>
+);
+
 export default function AccountDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -347,29 +355,46 @@ export default function AccountDetailPage() {
                   {/* Mobile card list */}
                   <div className="lg:hidden p-3 space-y-3">
                     {account.landed_entries.map((entry, i) => (
-                      <div key={i} className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">#{i+1}</span>
-                            <span className="text-xs text-secondary-ink">{formatDate(entry.date)}</span>
+                      <div key={i} className="rounded-xl border border-emerald-200 bg-white shadow-sm overflow-hidden">
+                        {/* Header band */}
+                        <div className="bg-emerald-50/80 px-3 py-2 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex-shrink-0">#{i+1}</span>
+                            <span className="text-xs text-secondary-ink truncate">{formatDate(entry.date)}</span>
                           </div>
                           <NotePreview html={entry.note} testId={`landed-note-mobile-${i}`} />
                         </div>
-                        <div className="flex items-baseline justify-between mb-2">
+
+                        {/* Hero: Amount + Rate */}
+                        <div className="px-3 pt-3 pb-2 flex items-baseline justify-between border-b border-slate-100">
                           <div>
-                            <p className="text-[10px] uppercase tracking-wider text-muted-ink">Amount</p>
-                            <p className="text-base font-bold tabular-nums text-success-ink">{formatCurrency(entry.amount)}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-ink font-medium">Amount</p>
+                            <p className="text-lg font-bold tabular-nums text-success-ink">{formatCurrency(entry.amount)}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-[10px] uppercase tracking-wider text-muted-ink">Rate</p>
-                            <p className="text-base font-bold tabular-nums text-primary-ink">{entry.interest_rate}%</p>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-ink font-medium">Rate</p>
+                            <p className="text-lg font-bold tabular-nums text-primary-ink">{entry.interest_rate}%<span className="text-[10px] font-normal text-muted-ink"> /mo</span></p>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Remaining</p><p className="tabular-nums font-semibold text-warning-ink">{formatCurrency(entry.remaining_principal)}</p></div>
-                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Total Interest</p><p className="tabular-nums font-semibold text-danger-ink">{formatCurrency(entry.total_interest)}</p></div>
-                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Interest Start</p><p className="text-primary-ink">{formatDate(entry.interest_start_date)}</p></div>
-                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Days</p><p className="tabular-nums text-primary-ink">{entry.days}</p></div>
+
+                        {/* Pending — most important after hero */}
+                        <div className="px-3 py-2 bg-amber-50/40 border-b border-slate-100 flex items-baseline justify-between">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-ink font-medium">Pending Principal</p>
+                            <p className="text-base font-bold tabular-nums text-warning-ink">{formatCurrency(entry.remaining_principal)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-ink font-medium">Total Interest</p>
+                            <p className="text-base font-bold tabular-nums text-danger-ink">{formatCurrency(entry.total_interest)}</p>
+                          </div>
+                        </div>
+
+                        {/* Interest period & breakdown */}
+                        <div className="px-3 py-2.5 grid grid-cols-2 gap-2 text-xs">
+                          <Stat label="Int. Start" value={formatDate(entry.interest_start_date)} />
+                          <Stat label="Days" value={entry.days ?? 0} mono />
+                          <Stat label="New Interest" value={formatCurrency(entry.calculated_interest)} valueClass="text-warning-ink" mono />
+                          <Stat label="Carry Fwd" value={formatCurrency(entry.carried_forward_interest)} valueClass="text-orange-600" mono />
                         </div>
                       </div>
                     ))}
@@ -380,9 +405,17 @@ export default function AccountDetailPage() {
                   <table className="w-full min-w-[900px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
-                        {['#','Date','Amount','Rate (%)','Remaining Principal','Interest Start','Days','Calculated Interest','Carried Forward','Total Interest','Note'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">{h}</th>
-                        ))}
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Date</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Amount</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Rate</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Remaining Principal</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Interest Start</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Days</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Calculated Interest</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Carried Forward</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Total Interest</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase whitespace-nowrap">Note</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -391,7 +424,7 @@ export default function AccountDetailPage() {
                           <td className="px-4 py-3 text-sm text-muted-ink">{i + 1}</td>
                           <td className="px-4 py-3 text-sm text-primary-ink">{formatDate(entry.date)}</td>
                           <td className="px-4 py-3 text-sm font-mono font-semibold text-success-ink text-right tabular-nums">{formatCurrency(entry.amount)}</td>
-                          <td className="px-4 py-3 text-sm font-mono text-primary-ink">{entry.interest_rate}%</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{entry.interest_rate}%</td>
                           <td className="px-4 py-3 text-sm font-mono text-warning-ink text-right tabular-nums">{formatCurrency(entry.remaining_principal)}</td>
                           <td className="px-4 py-3 text-sm text-primary-ink">{formatDate(entry.interest_start_date)}</td>
                           <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{entry.days}</td>
@@ -421,21 +454,26 @@ export default function AccountDetailPage() {
                   {/* Mobile card list */}
                   <div className="lg:hidden p-3 space-y-3">
                     {account.received_entries.map((entry, i) => (
-                      <div key={i} className="rounded-xl border border-blue-200 bg-blue-50/40 p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">#{i+1}</span>
-                            <span className="text-xs text-secondary-ink">{formatDate(entry.date)}</span>
+                      <div key={i} className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+                        {/* Header band */}
+                        <div className="bg-blue-50/80 px-3 py-2 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 flex-shrink-0">#{i+1}</span>
+                            <span className="text-xs text-secondary-ink truncate">{formatDate(entry.date)}</span>
                           </div>
                           <NotePreview html={entry.note} testId={`received-note-mobile-${i}`} />
                         </div>
-                        <div className="mb-2">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-ink">Amount</p>
-                          <p className="text-base font-bold tabular-nums text-info-ink">{formatCurrency(entry.amount)}</p>
+
+                        {/* Hero: Amount */}
+                        <div className="px-3 pt-3 pb-2 border-b border-slate-100">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-ink font-medium">Amount Received</p>
+                          <p className="text-lg font-bold tabular-nums text-info-ink">{formatCurrency(entry.amount)}</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Principal Paid</p><p className="tabular-nums font-semibold text-success-ink">{formatCurrency(entry.principal_paid)}</p></div>
-                          <div className="bg-white rounded-md px-2 py-1.5"><p className="text-[10px] text-muted-ink">Interest Paid</p><p className="tabular-nums font-semibold text-warning-ink">{formatCurrency(entry.interest_paid)}</p></div>
+
+                        {/* Allocation breakdown */}
+                        <div className="px-3 py-2.5 grid grid-cols-2 gap-2 text-xs">
+                          <Stat label="Principal Paid" value={formatCurrency(entry.principal_paid)} valueClass="text-success-ink" mono />
+                          <Stat label="Interest Paid" value={formatCurrency(entry.interest_paid)} valueClass="text-warning-ink" mono />
                         </div>
                       </div>
                     ))}
@@ -446,9 +484,12 @@ export default function AccountDetailPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50">
-                        {['#','Date','Amount','Principal Paid','Interest Paid','Note'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">{h}</th>
-                        ))}
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">Date</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase">Amount</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase">Principal Paid</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase">Interest Paid</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">Note</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">

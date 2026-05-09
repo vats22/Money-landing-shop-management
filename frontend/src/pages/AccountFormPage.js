@@ -521,13 +521,17 @@ export default function AccountFormPage() {
         <div className={stepCls(0)}>
         <Card>
           <CardHeader>
-            <CardTitle>Basic Details</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-emerald-600" />
+              Basic Details
+            </CardTitle>
+            <p className="text-xs text-secondary-ink mt-1">Customer & account essentials</p>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Account Opening Date *
+                <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                  Opening Date <span className="text-danger-ink">*</span>
                 </label>
                 <Input
                   data-testid="opening-date"
@@ -537,17 +541,19 @@ export default function AccountFormPage() {
                   onChange={handleChange}
                   max={today}
                   required
+                  className="tap-target"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Status *
+                <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                  Status <span className="text-danger-ink">*</span>
                 </label>
                 <Select
                   data-testid="status-select"
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
+                  className="tap-target"
                 >
                   <option value="continue">Continue</option>
                   <option value="closed">Closed</option>
@@ -556,8 +562,8 @@ export default function AccountFormPage() {
                 </Select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Name *
+                <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                  Customer Name <span className="text-danger-ink">*</span>
                 </label>
                 <Input
                   data-testid="name-input"
@@ -565,13 +571,14 @@ export default function AccountFormPage() {
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  placeholder="Customer name"
+                  placeholder="e.g., Ramesh Patel"
                   required
+                  className="tap-target"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Village *
+                <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                  Village <span className="text-danger-ink">*</span>
                 </label>
                 <Input
                   data-testid="village-input"
@@ -579,13 +586,14 @@ export default function AccountFormPage() {
                   name="village"
                   value={formData.village}
                   onChange={handleChange}
-                  placeholder="Village name"
+                  placeholder="e.g., Surat"
                   required
+                  className="tap-target"
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Notes / Details
+                <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                  Notes / Details <span className="text-muted-ink font-normal normal-case">(optional)</span>
                 </label>
                 <div className="quill-wrapper" data-testid="details-editor">
                   <ReactQuill
@@ -594,7 +602,7 @@ export default function AccountFormPage() {
                     onChange={(val) => setFormData(prev => ({ ...prev, details: val }))}
                     modules={quillModules}
                     formats={quillFormats}
-                    placeholder="Any additional notes..."
+                    placeholder="Any contextual notes about this account…"
                   />
                 </div>
               </div>
@@ -621,10 +629,10 @@ export default function AccountFormPage() {
           <CardContent>
             <div className="space-y-3">
               {formData.jewellery_items.map((item, index) => (
-                <div key={index} className="flex gap-4 items-start p-4 bg-slate-50 rounded-lg">
+                <div key={index} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-start p-3 sm:p-4 bg-amber-50/40 border border-amber-200/50 rounded-xl">
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                      Item Name *
+                    <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                      Item Name <span className="text-danger-ink">*</span>
                     </label>
                     <Input
                       data-testid={`jewellery-name-${index}`}
@@ -632,11 +640,12 @@ export default function AccountFormPage() {
                       value={item.name}
                       onChange={(e) => updateJewelleryItem(index, 'name', e.target.value)}
                       placeholder="e.g., Gold Ring"
+                      className="tap-target"
                     />
                   </div>
-                  <div className="w-32">
-                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                      Weight (g) *
+                  <div className="sm:w-32">
+                    <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                      Weight (g) <span className="text-danger-ink">*</span>
                     </label>
                     <Input
                       data-testid={`jewellery-weight-${index}`}
@@ -645,19 +654,20 @@ export default function AccountFormPage() {
                       value={item.weight}
                       onChange={handleNumericInput(updateJewelleryItem, 'weight', index)}
                       placeholder="10.5"
+                      className="tap-target"
                     />
                   </div>
                   {/* Image upload button - only in edit mode */}
                   {isEdit && (
-                    <div className="w-24">
-                      <label className="block text-xs font-medium text-slate-500 mb-1">
+                    <div className="sm:w-24">
+                      <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
                         Images
                       </label>
                       <button
                         type="button"
                         onClick={() => openImageModal(item, index)}
                         data-testid={`jewellery-images-${index}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200 w-full justify-center"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200 w-full justify-center tap-target"
                       >
                         <ImageIcon className="h-3.5 w-3.5" />
                         {item.images?.length || 0} / {MAX_IMAGES}
@@ -703,11 +713,11 @@ export default function AccountFormPage() {
           <CardContent>
             <div className="space-y-3">
               {formData.landed_entries.map((entry, index) => (
-                <div key={index} className="p-4 bg-emerald-50 rounded-lg">
+                <div key={index} className="p-3 sm:p-4 bg-emerald-50/60 border border-emerald-200/60 rounded-xl">
                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-start">
                     <div className="flex-1">
-                      <label className="block text-xs font-medium text-secondary-ink mb-1">
-                        Landed Date *
+                      <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                        Landed Date <span className="text-danger-ink">*</span>
                       </label>
                       <Input
                         data-testid={`landed-date-${index}`}
@@ -720,8 +730,8 @@ export default function AccountFormPage() {
                       />
                     </div>
                     <div className="flex-1">
-                      <label className="block text-xs font-medium text-secondary-ink mb-1">
-                        Amount (₹) *
+                      <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                        Amount (₹) <span className="text-danger-ink">*</span>
                       </label>
                       <Input
                         data-testid={`landed-amount-${index}`}
@@ -734,8 +744,8 @@ export default function AccountFormPage() {
                       />
                     </div>
                     <div className="sm:w-32">
-                      <label className="block text-xs font-medium text-secondary-ink mb-1">
-                        Interest % (Monthly)
+                      <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                        Rate %/mo
                       </label>
                       <Input
                         data-testid={`landed-interest-${index}`}
@@ -819,11 +829,11 @@ export default function AccountFormPage() {
             ) : (
               <div className="space-y-3">
                 {formData.received_entries.map((entry, index) => (
-                  <div key={index} className="p-4 bg-blue-50 rounded-lg">
+                  <div key={index} className="p-3 sm:p-4 bg-blue-50/60 border border-blue-200/60 rounded-xl">
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-start">
                       <div className="flex-1">
-                        <label className="block text-xs font-medium text-secondary-ink mb-1">
-                          Received Date *
+                        <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                          Received Date <span className="text-danger-ink">*</span>
                         </label>
                         <Input
                           data-testid={`received-date-${index}`}
@@ -836,8 +846,8 @@ export default function AccountFormPage() {
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="block text-xs font-medium text-secondary-ink mb-1">
-                          Amount (₹) *
+                        <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                          Amount (₹) <span className="text-danger-ink">*</span>
                         </label>
                         <Input
                           data-testid={`received-amount-${index}`}
