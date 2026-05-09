@@ -76,6 +76,8 @@ export default function AccountFormPage() {
   const [openReceivedNote, setOpenReceivedNote] = useState({});
   // Mobile stepper (Account → Jewellery → Landed → Received)
   const [mobileStep, setMobileStep] = useState(0);
+  // Confirm dialog for removing a note from an entry
+  const [removeNoteConfirm, setRemoveNoteConfirm] = useState(null); // { type: 'landed'|'received', index }
 
   // Image modal state
   const MAX_IMAGES = 5;
@@ -206,23 +208,32 @@ export default function AccountFormPage() {
 
   // Image handling functions
   const openImageModal = (item, index) => {
+    if (!item.name?.trim()) {
+      toast.error('Add the item name first, then attach images.');
+      return;
+    }
     setSelectedItemIndex(index);
-    setSelectedItemImages(item.images || []);
+    const combined = [...(item.images || []), ...(item.pendingImages || [])];
+    setSelectedItemImages(combined);
     setSelectedItemName(item.name || `Item ${index + 1}`);
     setCurrentImageIdx(0);
     setShowImageModal(true);
   };
 
   const getImageUrl = (image) => {
+    // Pending (not-yet-uploaded) image — show local object URL
+    if (image && image.__pending && image.__objectUrl) return image.__objectUrl;
     const token = localStorage.getItem('token');
     return `${process.env.REACT_APP_BACKEND_URL}/api/files/${image.storage_path}?auth=${token}`;
   };
 
-  const uploadFileToServer = async (file) => {
+  const uploadFileToServer = async (file, accountIdOverride = null, itemIdxOverride = null) => {
+    const accId = accountIdOverride || id;
+    const itemIdx = itemIdxOverride !== null ? itemIdxOverride : selectedItemIndex;
     const fd = new FormData();
     fd.append('file', file);
     try {
-      await api.post(`/api/accounts/${id}/jewellery/${selectedItemIndex}/images`, fd, {
+      await api.post(`/api/accounts/${accId}/jewellery/${itemIdx}/images`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       return true;
@@ -250,25 +261,72 @@ export default function AccountFormPage() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const currentImages = formData.jewellery_items[selectedItemIndex]?.images || [];
-    const remaining = MAX_IMAGES - currentImages.length;
-    if (remaining <= 0) { toast.error('Maximum 5 images per item'); return; }
+    const item = formData.jewellery_items[selectedItemIndex] || {};
+    const currentImages = item.images || [];
+    const pendingImages = item.pendingImages || [];
+    const remaining = MAX_IMAGES - (currentImages.length + pendingImages.length);
+    if (remaining <= 0) { toast.error('Maximum 5 images per item'); if (e.target) e.target.value = ''; return; }
 
-    const filesToUpload = files.slice(0, remaining);
-    setUploading(true);
+    const filesToUpload = files.slice(0, remaining).filter(f => {
+      if (f.size > 10 * 1024 * 1024) { toast.error(`${f.name}: Too large (max 10MB)`); return false; }
+      return true;
+    });
+    if (!filesToUpload.length) { if (e.target) e.target.value = ''; return; }
 
-    for (const file of filesToUpload) {
-      if (file.size > 10 * 1024 * 1024) { toast.error(`${file.name}: Too large (max 10MB)`); continue; }
-      await uploadFileToServer(file);
+    if (isEdit) {
+      // Edit mode → upload immediately to existing account
+      setUploading(true);
+      for (const file of filesToUpload) {
+        await uploadFileToServer(file);
+      }
+      setUploading(false);
+      toast.success('Images uploaded');
+      await refreshImagesAfterUpload();
+    } else {
+      // Add mode → stage locally; will upload after the account is created
+      const stagedImages = filesToUpload.map(file => ({
+        __pending: true,
+        __file: file,
+        __objectUrl: URL.createObjectURL(file),
+        id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        filename: file.name,
+      }));
+      setFormData(prev => ({
+        ...prev,
+        jewellery_items: prev.jewellery_items.map((it, i) =>
+          i === selectedItemIndex
+            ? { ...it, pendingImages: [...(it.pendingImages || []), ...stagedImages] }
+            : it
+        )
+      }));
+      // Reflect in the modal's currently-shown list (server images + pending)
+      setSelectedItemImages([...(item.images || []), ...((item.pendingImages || [])), ...stagedImages]);
+      toast.success(`${stagedImages.length} image(s) staged. They will upload when you save.`);
     }
 
-    setUploading(false);
-    toast.success('Images uploaded');
-    await refreshImagesAfterUpload();
     if (e.target) e.target.value = '';
   };
 
   const handleDeleteImage = async (imageId) => {
+    // Pending (not-yet-uploaded) image — remove locally only
+    if (typeof imageId === 'string' && imageId.startsWith('pending-')) {
+      setFormData(prev => ({
+        ...prev,
+        jewellery_items: prev.jewellery_items.map((it, i) =>
+          i === selectedItemIndex
+            ? { ...it, pendingImages: (it.pendingImages || []).filter(p => p.id !== imageId) }
+            : it
+        )
+      }));
+      const item = formData.jewellery_items[selectedItemIndex] || {};
+      const newPending = (item.pendingImages || []).filter(p => p.id !== imageId);
+      const updated = [...(item.images || []), ...newPending];
+      setSelectedItemImages(updated);
+      if (currentImageIdx >= updated.length) setCurrentImageIdx(Math.max(0, updated.length - 1));
+      toast.success('Image removed');
+      return;
+    }
+    if (!isEdit) return;
     try {
       await api.delete(`/api/accounts/${id}/jewellery/${selectedItemIndex}/images/${imageId}`);
       toast.success('Image deleted');
@@ -318,13 +376,34 @@ export default function AccountFormPage() {
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setUploading(true);
       closeCamera();
-      const success = await uploadFileToServer(file);
-      setUploading(false);
-      if (success) {
-        toast.success('Photo captured and uploaded');
-        await refreshImagesAfterUpload();
+      if (isEdit) {
+        setUploading(true);
+        const success = await uploadFileToServer(file);
+        setUploading(false);
+        if (success) {
+          toast.success('Photo captured and uploaded');
+          await refreshImagesAfterUpload();
+        }
+      } else {
+        // Add mode: stage locally
+        const staged = {
+          __pending: true, __file: file,
+          __objectUrl: URL.createObjectURL(file),
+          id: `pending-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+          filename: file.name,
+        };
+        setFormData(prev => ({
+          ...prev,
+          jewellery_items: prev.jewellery_items.map((it, i) =>
+            i === selectedItemIndex
+              ? { ...it, pendingImages: [...(it.pendingImages || []), staged] }
+              : it
+          )
+        }));
+        const item = formData.jewellery_items[selectedItemIndex] || {};
+        setSelectedItemImages([...(item.images || []), ...(item.pendingImages || []), staged]);
+        toast.success('Photo captured. It will upload when you save.');
       }
     }, 'image/jpeg', 0.85);
   };
@@ -374,6 +453,10 @@ export default function AccountFormPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Defensive: never trigger a save while mobile user is mid-stepper.
+    // The visible "Update/Create" button only renders on the final step,
+    // but a stray Enter key in a mobile field can still bubble up here.
+    if (window.innerWidth < 1024 && mobileStep < 3) return;
     if (!validateForm()) return;
     setPendingSubmitEvent(true);
     setShowSaveConfirm(true);
@@ -430,8 +513,24 @@ export default function AccountFormPage() {
         toast.success('Account updated successfully');
       } else {
         const response = await api.post('/api/accounts', payload);
+        const newId = response.data.id;
+        // Upload any pending (staged) jewellery images
+        const pendingUploads = [];
+        formData.jewellery_items.forEach((item, idx) => {
+          (item.pendingImages || []).forEach(p => {
+            if (p.__file) pendingUploads.push({ file: p.__file, idx });
+          });
+        });
+        if (pendingUploads.length > 0) {
+          toast.message(`Uploading ${pendingUploads.length} image(s)…`);
+          for (const u of pendingUploads) {
+            await uploadFileToServer(u.file, newId, u.idx);
+          }
+          // Revoke local object URLs to free memory
+          formData.jewellery_items.forEach(item => (item.pendingImages || []).forEach(p => p.__objectUrl && URL.revokeObjectURL(p.__objectUrl)));
+        }
         toast.success('Account created successfully');
-        navigate(`/accounts/${response.data.id}`);
+        navigate(`/accounts/${newId}`);
         return;
       }
       navigate(`/accounts/${id}`);
@@ -657,23 +756,21 @@ export default function AccountFormPage() {
                       className="tap-target"
                     />
                   </div>
-                  {/* Image upload button - only in edit mode */}
-                  {isEdit && (
-                    <div className="sm:w-24">
-                      <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
-                        Images
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => openImageModal(item, index)}
-                        data-testid={`jewellery-images-${index}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200 w-full justify-center tap-target"
-                      >
-                        <ImageIcon className="h-3.5 w-3.5" />
-                        {item.images?.length || 0} / {MAX_IMAGES}
-                      </button>
-                    </div>
-                  )}
+                  {/* Image upload — available in both Add and Edit modes */}
+                  <div className="sm:w-24">
+                    <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
+                      Images
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => openImageModal(item, index)}
+                      data-testid={`jewellery-images-${index}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200 w-full justify-center tap-target"
+                    >
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      {((item.images?.length || 0) + (item.pendingImages?.length || 0))} / {MAX_IMAGES}
+                    </button>
+                  </div>
                   {formData.jewellery_items.length > 1 && (
                     <button
                       type="button"
@@ -686,8 +783,9 @@ export default function AccountFormPage() {
                 </div>
               ))}
               {!isEdit && (
-                <p className="text-xs text-slate-400 italic mt-2">
-                  Images can be uploaded after saving the account.
+                <p className="text-xs text-muted-ink italic mt-2 flex items-center gap-1.5">
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  Add images now — they'll auto-upload after the account is saved.
                 </p>
               )}
             </div>
@@ -786,8 +884,9 @@ export default function AccountFormPage() {
                           <label className="text-xs font-medium text-secondary-ink">Note</label>
                           <button
                             type="button"
-                            onClick={() => { updateLandedEntry(index, 'note', ''); setOpenLandedNote(o => ({ ...o, [index]: false })); }}
-                            className="text-[11px] text-muted-ink hover:text-slate-700"
+                            onClick={() => setRemoveNoteConfirm({ type: 'landed', index })}
+                            className="text-[11px] text-muted-ink hover:text-red-600"
+                            data-testid={`landed-note-remove-${index}`}
                           >Remove</button>
                         </div>
                         <NoteEditor
@@ -886,8 +985,9 @@ export default function AccountFormPage() {
                             <label className="text-xs font-medium text-secondary-ink">Note</label>
                             <button
                               type="button"
-                              onClick={() => { updateReceivedEntry(index, 'note', ''); setOpenReceivedNote(o => ({ ...o, [index]: false })); }}
-                              className="text-[11px] text-muted-ink hover:text-slate-700"
+                              onClick={() => setRemoveNoteConfirm({ type: 'received', index })}
+                              className="text-[11px] text-muted-ink hover:text-red-600"
+                              data-testid={`received-note-remove-${index}`}
                             >Remove</button>
                           </div>
                           <NoteEditor
@@ -919,7 +1019,12 @@ export default function AccountFormPage() {
             </Button>
           )}
           {mobileStep < 3 ? (
-            <Button type="button" onClick={() => setMobileStep(s => s + 1)} className="flex-1 tap-target" data-testid="step-next">
+            <Button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMobileStep(s => s + 1); }}
+              className="flex-1 tap-target"
+              data-testid="step-next"
+            >
               Next →
             </Button>
           ) : (
@@ -1116,6 +1221,29 @@ export default function AccountFormPage() {
         message={isEdit ? 'Are you sure you want to update this entry?' : 'Are you sure you want to create this entry?'}
         confirmText={isEdit ? 'Yes, Update' : 'Yes, Create'}
         variant="warning"
+      />
+
+      {/* Confirm note removal */}
+      <ConfirmDialog
+        isOpen={!!removeNoteConfirm}
+        onClose={() => setRemoveNoteConfirm(null)}
+        onConfirm={() => {
+          if (removeNoteConfirm) {
+            const { type, index } = removeNoteConfirm;
+            if (type === 'landed') {
+              updateLandedEntry(index, 'note', '');
+              setOpenLandedNote(o => ({ ...o, [index]: false }));
+            } else if (type === 'received') {
+              updateReceivedEntry(index, 'note', '');
+              setOpenReceivedNote(o => ({ ...o, [index]: false }));
+            }
+          }
+          setRemoveNoteConfirm(null);
+        }}
+        title="Remove Note"
+        message="Are you sure you want to remove this note? This cannot be undone."
+        confirmText="Yes, Remove"
+        variant="danger"
       />
 
       {/* Quill Editor Styles */}

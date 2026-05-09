@@ -62,6 +62,25 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // Visible chips showing the current selection so the user knows what's selected
+  const FromToChips = (
+    <div className="flex items-center gap-2 mb-3">
+      <div className="flex-1 px-2.5 py-1.5 rounded-md bg-emerald-50 border border-emerald-200">
+        <p className="text-[9px] uppercase tracking-wider text-emerald-700 font-semibold">From</p>
+        <p className="text-xs font-mono tabular-nums text-emerald-900">
+          {range.from ? format(range.from, 'dd MMM yyyy') : '—'}
+        </p>
+      </div>
+      <span className="text-secondary-ink">→</span>
+      <div className="flex-1 px-2.5 py-1.5 rounded-md bg-emerald-50 border border-emerald-200">
+        <p className="text-[9px] uppercase tracking-wider text-emerald-700 font-semibold">To</p>
+        <p className="text-xs font-mono tabular-nums text-emerald-900">
+          {range.to ? format(range.to, 'dd MMM yyyy') : '—'}
+        </p>
+      </div>
+    </div>
+  );
+
   // The calendar panel — same structure for desktop popover and mobile portal modal.
   const CalendarPanel = (
     <div className="bg-white rounded-xl shadow-2xl border border-slate-200 p-3 max-w-[calc(100vw-1.5rem)] overflow-hidden" data-testid="date-range-calendar">
@@ -78,6 +97,10 @@ export function DateRangePicker({ startDate, endDate, onChange, maxDate }) {
           </button>
         </div>
       )}
+      {FromToChips}
+      <p className="text-[10px] text-muted-ink mb-2 text-center">
+        Tap <strong>start</strong> date, then tap <strong>end</strong> date
+      </p>
       <DayPicker
         mode="range"
         selected={range}
