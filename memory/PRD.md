@@ -28,6 +28,14 @@ Modern web app to digitize jewellery-pledge lending operations: track accounts, 
 - 2026-05-09 — **Notes feature**: rich-text (Quill) note per landed/received entry (HTML, max ~500 chars), persisted in DB, displayed in ledger as 📝 icon with popover, full note shown in expanded ledger row.
 - 2026-05-09 — **Mobile / responsive overhaul**: card view <lg, persistent bottom navigation (Home/Accounts/Reports/More), filter bottom sheet, single-column edit form, 44px tap targets, tabular-nums everywhere, sticky table headers + first column, semantic color tokens (text.primary/secondary/muted, state.success/danger/warning/info), density toggle (Comfortable/Compact) on Accounts table, friendly empty states.
 - 2026-05-09 — **Mobile DateRangePicker fix**: FROM/TO chips are now interactive buttons that jump the calendar to that date's month + month/year dropdown caption (`captionLayout="dropdown-buttons"`) for instant navigation. After picking the start date, focus auto-switches to TO with a clear hint. Tested on both mobile (390×844) and desktop viewports.
+- 2026-06-20 — **Iteration 17 bug-fix bundle** (6 fixes, 100% test pass):
+   - **Image preservation (critical)**: `JewelleryItem` Pydantic model gained `images: Optional[List[dict]]` + `update_account` now uses `model_dump(exclude_unset=True)` to differentiate "not sent" from "set empty". Previously editing any account wiped all uploaded jewellery images.
+   - **Inline image thumbnails** in Account Details → Jewellery section (desktop table + mobile card) with broken-image SVG fallback.
+   - **Mobile rich-text overflow** safeguard via new `.safe-rich-text` utility (word-break, overflow-wrap, max-width:100%; long URLs, code, tables wrap inside cards).
+   - **4-column frozen header** on Accounts table (Actions / Account # / Name / Opening Date) using `position:sticky` + explicit left offsets + solid bg + edge shadow on col 4 + z-index 16 on header.
+   - **Password show/hide toggle** via new reusable `PasswordInput` component on Login + User-Create forms (testids `*-password-toggle`).
+   - **Created On / Updated By columns** added to desktop table + mobile card; sort-asc/desc enabled on Created On & Updated On; Excel export gained the 4 new headers.
+   - **Accessibility / contrast**: `--text-muted` lifted #94A3B8 → #64748B (WCAG-AA on white), `--text-secondary` #475569 → #334155; offending `text-slate-300/400` swapped for semantic tokens in Dashboard / AccountDetail.
 
 ### P0 backlog (next)
 - Account Consolidation / Merge wizard (N→1, settle + transfer-in tagged as `is_internal_transfer`)
