@@ -96,7 +96,7 @@ export default function NotePreview({ html, label = 'Note', testId }) {
             {label}
           </div>
           <div
-            className="prose prose-xs max-w-none text-primary-ink [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:m-0"
+            className="safe-rich-text prose prose-xs max-w-none text-primary-ink [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:m-0"
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
           />
         </div>,

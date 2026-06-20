@@ -13,4 +13,4 @@
 - Password: `viewer123`
 
 ## Frontend URL
-https://web-showcase-217.preview.emergentagent.com
+https://db-intact-demo.preview.emergentagent.com

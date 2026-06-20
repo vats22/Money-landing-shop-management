@@ -7,8 +7,8 @@
    ========================================================= */
 :root {
   --text-primary: #0F1419;
-  --text-secondary: #475569;
-  --text-muted: #94A3B8;
+  --text-secondary: #334155;  /* darker for better contrast (was #475569) */
+  --text-muted: #64748B;       /* darker (was #94A3B8 - too light, failed WCAG) */
   --state-success: #047857;
   --state-success-bg: #D1FAE5;
   --state-danger: #B91C1C;
@@ -71,7 +71,7 @@ body { min-height: 100vh; }
 .sticky-header { position: sticky; top: 0; z-index: 10; background: white; }
 thead.sticky-header th { background: #F8FAFC; }
 
-/* Sticky first column on large tables */
+/* Sticky first column on large tables (legacy single-frozen) */
 .sticky-col {
   position: sticky;
   left: 0;
@@ -80,6 +80,34 @@ thead.sticky-header th { background: #F8FAFC; }
   box-shadow: 1px 0 0 0 rgba(15, 23, 42, 0.06);
 }
 thead.sticky-header .sticky-col { z-index: 15; background: #F8FAFC; }
+
+/* ============================================================
+   Multi-frozen columns (Accounts table)
+   Freezes: Actions (col-1) | Account # (col-2) | Name (col-3) | Opening Date (col-4)
+   Uses SOLID white background on body rows + slate-50 on header.
+   Hover state recolors the frozen cells to match the row hover bg.
+   ============================================================ */
+.frozen-cols-table { position: relative; }
+.frozen-cols-table th.frz-col,
+.frozen-cols-table td.frz-col {
+  position: sticky;
+  z-index: 4;
+  background-color: #ffffff; /* SOLID - prevents bleed-through */
+}
+/* Column widths + left offsets (must match column declarations) */
+.frozen-cols-table .frz-col-1 { left: 0;     width: 130px; min-width: 130px; max-width: 130px; }
+.frozen-cols-table .frz-col-2 { left: 130px; width: 120px; min-width: 120px; max-width: 120px; }
+.frozen-cols-table .frz-col-3 { left: 250px; width: 170px; min-width: 170px; max-width: 170px; }
+.frozen-cols-table .frz-col-4 { left: 420px; width: 130px; min-width: 130px; max-width: 130px;
+  box-shadow: 4px 0 8px -4px rgba(15, 23, 42, 0.12); /* edge shadow on the last frozen col */
+}
+/* Header cells sit above body cells so the body never scrolls UNDER the header */
+.frozen-cols-table thead.sticky-header th.frz-col { z-index: 16; background-color: #F8FAFC; }
+/* Row hover — apply slate-50 to frozen cells too */
+.frozen-cols-table tbody tr.frz-row:hover td.frz-col { background-color: #F8FAFC; }
+/* Subtle divider between frozen and scrolling area */
+.frozen-cols-table td.frz-col-4,
+.frozen-cols-table th.frz-col-4 { border-right: 1px solid #E2E8F0; }
 
 /* Table horizontal scroll container */
 .table-container {
@@ -153,6 +181,54 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 /* Hide scrollbar but keep functionality (used for tab strips) */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* =============================================================
+   Rich-text safety container (used in Account Details, etc.)
+   Forces all rich content (long words, tables, images) to stay
+   within the card boundary on mobile. Apply via class="safe-rich-text".
+   ============================================================= */
+.safe-rich-text {
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+.safe-rich-text * {
+  max-width: 100% !important;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.safe-rich-text img,
+.safe-rich-text video,
+.safe-rich-text iframe {
+  max-width: 100% !important;
+  height: auto !important;
+}
+.safe-rich-text pre,
+.safe-rich-text code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+.safe-rich-text a {
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+.safe-rich-text table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.safe-rich-text ul,
+.safe-rich-text ol {
+  padding-left: 1.25rem;
+}
+.safe-rich-text ul { list-style: disc; }
+.safe-rich-text ol { list-style: decimal; }
+.safe-rich-text p { margin: 0 0 0.5rem 0; }
+.safe-rich-text p:last-child { margin-bottom: 0; }
 
 /* === Desktop DateRangePicker — continuous range pill (matches reference) === */
 @media (min-width: 640px) {

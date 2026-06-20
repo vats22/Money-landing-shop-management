@@ -156,9 +156,9 @@ export default function AccountsPage() {
   };
 
   const columns = [
-    { key: 'account_number', label: 'Account #', sortable: true },
-    { key: 'opening_date', label: 'Opening Date', sortable: true },
-    { key: 'name', label: 'Name', sortable: true },
+    { key: 'account_number', label: 'Account #', sortable: true, frozen: true },
+    { key: 'name', label: 'Name', sortable: true, frozen: true },
+    { key: 'opening_date', label: 'Opening Date', sortable: true, frozen: true },
     { key: 'village', label: 'Village', sortable: true },
     { key: 'jewellery_items', label: 'Jewellery Items' },
     { key: 'total_jewellery_weight', label: 'Total Weight' },
@@ -169,8 +169,10 @@ export default function AccountsPage() {
     { key: 'total_pending_amount', label: 'Pending Amt' },
     { key: 'total_pending_interest', label: 'Pending Interest' },
     { key: 'status', label: 'Status', sortable: true },
+    { key: 'created_at', label: 'Created On', sortable: true },
     { key: 'created_by_name', label: 'Created By' },
-    { key: 'updated_at', label: 'Updated On' },
+    { key: 'updated_at', label: 'Updated On', sortable: true },
+    { key: 'updated_by_name', label: 'Updated By' },
   ];
 
   if (!canView) {
@@ -429,12 +431,27 @@ export default function AccountsPage() {
           {/* Desktop table */}
           <Card className="hidden lg:block">
             <CardContent className="p-0">
-              <div className="table-container">
-                <table className={`w-full min-w-[1800px] ${density === 'compact' ? 'text-xs' : 'text-sm'}`}>
+              <div className="table-container frozen-cols-table">
+                <table className={`w-full min-w-[2000px] ${density === 'compact' ? 'text-xs' : 'text-sm'}`}>
                   <thead className="sticky-header">
                     <tr className="border-b border-slate-200">
-                      <th className={`${density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-4'} text-left font-semibold text-primary-ink bg-slate-50 sticky-col`}>Actions</th>
-                      {columns.map((col) => (
+                      <th className={`${density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-4'} text-left font-semibold text-primary-ink bg-slate-50 frz-col frz-col-1`}>Actions</th>
+                      <th className={`${density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-4'} text-left font-semibold text-primary-ink bg-slate-50 frz-col frz-col-2 whitespace-nowrap`}>
+                        <button onClick={() => handleSort('account_number')} className="flex items-center gap-1 hover:text-emerald-700 transition-colors">
+                          Account # <SortIcon column="account_number" />
+                        </button>
+                      </th>
+                      <th className={`${density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-4'} text-left font-semibold text-primary-ink bg-slate-50 frz-col frz-col-3 whitespace-nowrap`}>
+                        <button onClick={() => handleSort('name')} className="flex items-center gap-1 hover:text-emerald-700 transition-colors">
+                          Name <SortIcon column="name" />
+                        </button>
+                      </th>
+                      <th className={`${density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-4'} text-left font-semibold text-primary-ink bg-slate-50 frz-col frz-col-4 whitespace-nowrap`}>
+                        <button onClick={() => handleSort('opening_date')} className="flex items-center gap-1 hover:text-emerald-700 transition-colors">
+                          Opening Date <SortIcon column="opening_date" />
+                        </button>
+                      </th>
+                      {columns.filter(c => !c.frozen).map((col) => (
                         <th key={col.key} className={`${density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-4'} text-left font-semibold text-primary-ink bg-slate-50 whitespace-nowrap`}>
                           {col.sortable ? (
                             <button onClick={() => handleSort(col.key)} className="flex items-center gap-1 hover:text-emerald-700 transition-colors">
@@ -448,8 +465,8 @@ export default function AccountsPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {accounts.map((account, idx) => (
-                      <tr key={account.id} className="hover:bg-slate-50 transition-colors" style={{ animationDelay: `${idx * 50}ms` }}>
-                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} sticky-col bg-white`}>
+                      <tr key={account.id} className="frz-row hover:bg-slate-50 transition-colors" style={{ animationDelay: `${idx * 50}ms` }}>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} frz-col frz-col-1`}>
                           <div className="flex items-center gap-1">
                             <button
                               data-testid={`view-account-${account.id}`}
@@ -481,17 +498,17 @@ export default function AccountsPage() {
                             )}
                           </div>
                         </td>
-                        <td className={density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'}>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} frz-col frz-col-2`}>
                           <button onClick={() => navigate(`/accounts/${account.id}`)} className="font-mono text-sm font-semibold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer" data-testid={`click-acct-num-${account.id}`}>
                             {account.account_number}
                           </button>
                         </td>
-                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{formatDate(account.opening_date)}</td>
-                        <td className={density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'}>
-                          <button onClick={() => navigate(`/accounts/${account.id}`)} className="font-medium text-primary-ink hover:text-emerald-700 hover:underline cursor-pointer" data-testid={`click-acct-name-${account.id}`}>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} frz-col frz-col-3`}>
+                          <button onClick={() => navigate(`/accounts/${account.id}`)} className="font-medium text-primary-ink hover:text-emerald-700 hover:underline cursor-pointer truncate block max-w-[150px]" title={account.name} data-testid={`click-acct-name-${account.id}`}>
                             {account.name}
                           </button>
                         </td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} frz-col frz-col-4 text-secondary-ink whitespace-nowrap`}>{formatDate(account.opening_date)}</td>
                         <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{account.village}</td>
                         <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{account.jewellery_items?.length || 0} items</td>
                         <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-secondary-ink text-right tabular-nums`}>{formatWeight(account.total_jewellery_weight)}</td>
@@ -502,8 +519,10 @@ export default function AccountsPage() {
                         <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-warning-ink font-semibold text-right tabular-nums`}>{formatCurrency(account.total_pending_amount)}</td>
                         <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} font-mono text-danger-ink font-semibold text-right tabular-nums`}>{formatCurrency(account.total_pending_interest)}</td>
                         <td className={density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'}><StatusBadge status={account.status} /></td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink whitespace-nowrap`}>{formatDate(account.created_at)}</td>
                         <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{account.created_by_name || '-'}</td>
-                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-muted-ink`}>{formatDate(account.updated_at)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink whitespace-nowrap`}>{formatDate(account.updated_at)}</td>
+                        <td className={`${density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-3'} text-secondary-ink`}>{account.updated_by_name || '-'}</td>
                       </tr>
                     ))}
                   </tbody>

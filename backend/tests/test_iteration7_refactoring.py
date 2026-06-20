@@ -24,7 +24,7 @@ import requests
 import os
 from datetime import datetime
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://web-showcase-217.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://db-intact-demo.preview.emergentagent.com').rstrip('/')
 
 
 class TestAuthModule:

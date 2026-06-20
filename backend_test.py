@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import json
 
 class JewelleryLendingSystemTester:
-    def __init__(self, base_url="https://web-showcase-217.preview.emergentagent.com"):
+    def __init__(self, base_url="https://db-intact-demo.preview.emergentagent.com"):
         self.base_url = base_url
         self.admin_token = None
         self.user_token = None

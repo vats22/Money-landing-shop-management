@@ -31,7 +31,8 @@ async def export_accounts_excel(current_user: dict = Depends(verify_token)):
     ws.title = "Accounts"
     headers = ["Account No", "Name", "Village", "Opening Date", "Status",
                "Total Landed", "Total Received", "Pending Principal", "Pending Interest",
-               "Total Jewellery Weight (g)"]
+               "Total Jewellery Weight (g)", "Created On", "Created By",
+               "Updated On", "Updated By"]
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.fill = HEADER_FILL
@@ -40,12 +41,20 @@ async def export_accounts_excel(current_user: dict = Depends(verify_token)):
         cell.border = THIN_BORDER
     for row_idx, account in enumerate(accounts, 2):
         totals = calculate_account_totals(account)
+        created_at = account.get("created_at", "")
+        updated_at = account.get("updated_at", "")
+        if hasattr(created_at, "isoformat"):
+            created_at = created_at.isoformat()
+        if hasattr(updated_at, "isoformat"):
+            updated_at = updated_at.isoformat()
         row_data = [
             account.get("account_number", ""), account.get("name", ""), account.get("village", ""),
             account.get("opening_date", ""), account.get("status", ""),
             totals["total_landed_amount"], totals["total_received_amount"],
             totals["total_pending_amount"], totals["total_pending_interest"],
-            totals["total_jewellery_weight"]
+            totals["total_jewellery_weight"],
+            created_at, account.get("created_by_name", ""),
+            updated_at, account.get("updated_by_name", "")
         ]
         for col, value in enumerate(row_data, 1):
             cell = ws.cell(row=row_idx, column=col, value=value)

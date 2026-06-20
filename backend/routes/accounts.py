@@ -159,12 +159,31 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
         raise HTTPException(status_code=403, detail="Permission denied: accounts.update")
     if existing.get("status") == "closed":
         raise HTTPException(status_code=403, detail="Cannot modify a closed account. Please reopen it first.")
+    # Use exclude_unset so we can distinguish "field not provided" from "field set to default".
+    # This matters for jewellery_items.images — we must preserve existing images when the
+    # caller does not explicitly send them in the payload.
+    raw_payload = account.model_dump(exclude_unset=True)
     update_data = {k: v for k, v in account.model_dump().items() if v is not None}
     if "jewellery_items" in update_data:
+        # Preserve images by mapping incoming items against existing items by index.
+        # Frontend re-fetches images after upload and resends them, so we trust
+        # the payload's `images` first; otherwise fall back to existing.
+        existing_items = existing.get("jewellery_items", []) or []
+        raw_items = raw_payload.get("jewellery_items") or []
         jewellery_items = []
-        for item in update_data["jewellery_items"]:
+        for i, item in enumerate(update_data["jewellery_items"]):
             if isinstance(item, dict) and item.get("name") and item.get("weight"):
-                jewellery_items.append({"name": item["name"], "weight": float(item["weight"])})
+                # Did the caller explicitly include `images` for this item?
+                raw_item = raw_items[i] if i < len(raw_items) else {}
+                if isinstance(raw_item, dict) and "images" in raw_item and raw_item["images"] is not None:
+                    images = raw_item["images"]
+                else:
+                    images = existing_items[i].get("images", []) if i < len(existing_items) else []
+                jewellery_items.append({
+                    "name": item["name"],
+                    "weight": float(item["weight"]),
+                    "images": images,
+                })
         update_data["jewellery_items"] = jewellery_items
 
     # Whether landed/received entries are being modified in this request.

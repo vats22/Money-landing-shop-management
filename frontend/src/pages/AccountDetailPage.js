@@ -294,9 +294,13 @@ export default function AccountDetailPage() {
                 ))}
               </div>
               {account.details && (
-                <div className="mt-6 p-4 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Details / Notes</p>
-                  <div className="text-sm text-slate-700 prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(account.details) }} />
+                <div className="mt-6 p-4 bg-slate-50 rounded-lg overflow-hidden">
+                  <p className="text-xs text-secondary-ink uppercase tracking-wide mb-1 font-semibold">Details / Notes</p>
+                  <div
+                    className="safe-rich-text text-sm text-primary-ink prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                    data-testid="account-details-richtext"
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(account.details) }}
+                  />
                 </div>
               )}
             </CardContent>
@@ -308,37 +312,138 @@ export default function AccountDetailPage() {
           <Card>
             <CardContent className="p-0">
               {(!account.jewellery_items?.length) ? (
-                <p className="text-center py-12 text-slate-500">No jewellery items</p>
+                <p className="text-center py-12 text-secondary-ink">No jewellery items</p>
               ) : (
-                <table className="w-full">
+                <>
+                  {/* Mobile: card grid */}
+                  <div className="lg:hidden p-3 space-y-3" data-testid="jewellery-mobile-list">
+                    {account.jewellery_items.map((item, i) => {
+                      const imgs = item.images || [];
+                      return (
+                        <div key={i} className="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+                          <div className="bg-amber-50/70 px-3 py-2 flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">#{i + 1}</span>
+                            <button
+                              onClick={() => openImageViewer(item, i)}
+                              data-testid={`view-images-mobile-${i}`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                            >
+                              <ImageIcon className="h-3.5 w-3.5" />
+                              {imgs.length} / {MAX_IMAGES}
+                            </button>
+                          </div>
+                          <div className="px-3 pt-3 pb-2 border-b border-slate-100">
+                            <p className="text-sm font-semibold text-primary-ink">{item.name}</p>
+                            <p className="text-xs text-secondary-ink mt-0.5">Weight: <span className="font-mono tabular-nums text-primary-ink">{formatWeight(item.weight)}</span></p>
+                          </div>
+                          {imgs.length > 0 ? (
+                            <div className="px-3 py-2.5 flex gap-2 overflow-x-auto" data-testid={`jewellery-thumbs-mobile-${i}`}>
+                              {imgs.slice(0, 5).map((img, j) => (
+                                <button
+                                  key={img.id || j}
+                                  onClick={() => { openImageViewer(item, i); setCurrentImageIdx(j); }}
+                                  className="relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 hover:ring-2 hover:ring-emerald-400 transition-all"
+                                  data-testid={`jewellery-thumb-mobile-${i}-${j}`}
+                                  title={`Image ${j + 1}`}
+                                >
+                                  <img
+                                    src={getImageUrl(img)}
+                                    alt={`${item.name} ${j + 1}`}
+                                    loading="lazy"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('img-fallback'); }}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="px-3 py-3 flex items-center gap-2 text-xs text-muted-ink">
+                              <ImageIcon className="h-3.5 w-3.5" />
+                              No images uploaded
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop table */}
+                  <div className="hidden lg:block">
+                  <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">#</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Item Name</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Weight (g)</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Images</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-secondary-ink uppercase">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-secondary-ink uppercase">Item Name</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-secondary-ink uppercase">Weight (g)</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-secondary-ink uppercase">Images</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {account.jewellery_items.map((item, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-slate-900">{item.name}</td>
-                        <td className="px-4 py-3 text-sm text-right font-mono text-slate-700">{formatWeight(item.weight)}</td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => openImageViewer(item, i)}
-                            data-testid={`view-images-${i}`}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
-                          >
-                            <ImageIcon className="h-3.5 w-3.5" />
-                            {item.images?.length || 0} / {MAX_IMAGES}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {account.jewellery_items.map((item, i) => {
+                      const imgs = item.images || [];
+                      return (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 text-sm text-secondary-ink align-top">{i + 1}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-primary-ink align-top">{item.name}</td>
+                          <td className="px-4 py-3 text-sm text-right font-mono text-primary-ink align-top tabular-nums">{formatWeight(item.weight)}</td>
+                          <td className="px-4 py-3 align-top">
+                            {imgs.length === 0 ? (
+                              <button
+                                onClick={() => openImageViewer(item, i)}
+                                data-testid={`view-images-${i}`}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-secondary-ink hover:bg-slate-200 transition-colors"
+                              >
+                                <ImageIcon className="h-3.5 w-3.5" />
+                                No images
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-2 flex-wrap" data-testid={`jewellery-thumbs-${i}`}>
+                                {imgs.slice(0, 5).map((img, j) => (
+                                  <button
+                                    key={img.id || j}
+                                    onClick={() => { openImageViewer(item, i); setCurrentImageIdx(j); }}
+                                    className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 hover:ring-2 hover:ring-emerald-400 transition-all flex items-center justify-center"
+                                    data-testid={`jewellery-thumb-${i}-${j}`}
+                                    title={`View image ${j + 1}`}
+                                  >
+                                    <img
+                                      src={getImageUrl(img)}
+                                      alt={`${item.name} ${j + 1}`}
+                                      loading="lazy"
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        e.currentTarget.onerror = null;
+                                        e.currentTarget.style.display = 'none';
+                                        const ph = e.currentTarget.parentElement?.querySelector('.thumb-fallback');
+                                        if (ph) ph.style.display = 'flex';
+                                      }}
+                                    />
+                                    <span
+                                      className="thumb-fallback absolute inset-0 hidden items-center justify-center text-muted-ink"
+                                      aria-hidden="true"
+                                    >
+                                      <ImageIcon className="h-5 w-5" />
+                                    </span>
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => openImageViewer(item, i)}
+                                  data-testid={`view-images-${i}`}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                  title="Open gallery"
+                                >
+                                  {imgs.length} / {MAX_IMAGES}
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -688,13 +793,13 @@ export default function AccountDetailPage() {
                                     {/* User-provided note (rich text) */}
                                     {entry.user_note && (
                                       <div className="px-5 pb-4">
-                                        <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 overflow-hidden">
                                           <div className="flex items-center gap-2 mb-1.5">
                                             <StickyNote className="h-3.5 w-3.5 text-amber-700" />
                                             <span className="text-[10px] uppercase tracking-wider text-amber-800 font-semibold">User Note</span>
                                           </div>
                                           <div
-                                            className="prose prose-sm max-w-none text-amber-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                                            className="safe-rich-text prose prose-sm max-w-none text-amber-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                                             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(entry.user_note) }}
                                           />
                                         </div>
@@ -755,7 +860,7 @@ export default function AccountDetailPage() {
                             }`}>
                               {event.type === 'CLOSED' ? 'Account Closed' : 'Account Reopened'}
                             </span>
-                            <span className="text-xs text-slate-400">{formatDate(event.date)}</span>
+                            <span className="text-xs text-secondary-ink">{formatDate(event.date)}</span>
                           </div>
                           <p className="text-sm text-slate-600">
                             <span className="font-medium">By:</span> {event.by || 'Unknown'}
@@ -807,7 +912,7 @@ export default function AccountDetailPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Close Date</label>
             <Input type="text" value={new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} disabled className="bg-slate-100 cursor-not-allowed" data-testid="close-date-input" />
-            <p className="text-xs text-slate-400 mt-1">Close date is automatically set to today</p>
+            <p className="text-xs text-secondary-ink mt-1">Close date is automatically set to today</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Remarks (Optional)</label>
@@ -850,8 +955,8 @@ export default function AccountDetailPage() {
       <Modal isOpen={showImageModal} onClose={() => { setShowImageModal(false); setZoomLevel(1); }} title={`Images - ${selectedItemName}`} size="lg">
         <div className="space-y-4">
           {selectedItemImages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-              <ImageIcon className="h-12 w-12 mb-3" />
+            <div className="flex flex-col items-center justify-center py-12 text-secondary-ink">
+              <ImageIcon className="h-12 w-12 mb-3 text-muted-ink" />
               <p className="text-sm font-medium">No images uploaded yet</p>
               <p className="text-xs mt-1">Use the Edit form to upload images for this jewellery item</p>
             </div>
@@ -867,6 +972,10 @@ export default function AccountDetailPage() {
                   className="w-full h-[350px] object-contain transition-transform duration-200"
                   style={{ transform: `scale(${zoomLevel})` }}
                   data-testid="main-image"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 fill=%22%23F1F5F9%22/><text x=%22100%22 y=%22100%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%2364748B%22 font-family=%22sans-serif%22 font-size=%2214%22>Image not available</text></svg>';
+                  }}
                 />
                 {selectedItemImages.length > 1 && (
                   <>
@@ -912,7 +1021,16 @@ export default function AccountDetailPage() {
                       i === currentImageIdx ? 'border-emerald-500' : 'border-transparent hover:border-slate-300'
                     }`}
                   >
-                    <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
+                    <img
+                      src={getImageUrl(img)}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 fill=%22%23E2E8F0%22/><text x=%2232%22 y=%2236%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%2364748B%22 font-family=%22sans-serif%22 font-size=%2210%22>n/a</text></svg>';
+                      }}
+                    />
                   </button>
                 ))}
               </div>

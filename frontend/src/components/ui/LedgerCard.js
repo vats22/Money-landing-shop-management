@@ -104,13 +104,13 @@ export default function LedgerCard({ entry, index }) {
 
           {/* User note */}
           {entry.user_note && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 overflow-hidden">
               <div className="flex items-center gap-1.5 mb-1">
                 <StickyNote className="h-3.5 w-3.5 text-amber-700" />
                 <span className="text-[10px] uppercase tracking-wider text-amber-800 font-semibold">User Note</span>
               </div>
               <div
-                className="prose prose-xs max-w-none text-amber-900 [&_p]:m-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                className="safe-rich-text prose prose-xs max-w-none text-amber-900 [&_p]:m-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
                 dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(entry.user_note) }}
               />
             </div>

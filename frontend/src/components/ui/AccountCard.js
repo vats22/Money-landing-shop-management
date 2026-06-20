@@ -88,6 +88,20 @@ export default function AccountCard({ account, canEdit, canDelete, onDelete, onE
           </div>
         </div>
 
+        {/* Audit info: Created On + Updated By */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] mb-3" data-testid={`audit-row-${account.id}`}>
+          <div className="bg-slate-50 rounded px-2 py-1.5">
+            <p className="text-[10px] uppercase tracking-wider text-secondary-ink font-semibold">Created On</p>
+            <p className="text-primary-ink mt-0.5" data-testid={`card-created-on-${account.id}`}>{formatDate(account.created_at)}</p>
+          </div>
+          <div className="bg-slate-50 rounded px-2 py-1.5">
+            <p className="text-[10px] uppercase tracking-wider text-secondary-ink font-semibold">Updated By</p>
+            <p className="text-primary-ink mt-0.5 truncate" title={account.updated_by_name || account.created_by_name || '-'} data-testid={`card-updated-by-${account.id}`}>
+              {account.updated_by_name || account.created_by_name || '-'}
+            </p>
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="flex items-center justify-between border-t border-slate-100 pt-2.5">
           <span className="text-[11px] text-muted-ink">

@@ -129,9 +129,9 @@ export default function DashboardPage() {
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-500">{card.title}</p>
+                    <p className="text-sm font-medium text-secondary-ink">{card.title}</p>
                     <p className="text-2xl font-bold font-mono text-slate-900 mt-2 tabular-nums">{card.value}</p>
-                    <p className="text-xs text-slate-400 mt-1">{card.description}</p>
+                    <p className="text-xs text-muted-ink mt-1">{card.description}</p>
                   </div>
                   <div className={`p-3 rounded-xl ${card.iconBg}`}>
                     <card.icon className={`h-6 w-6 ${card.iconColor}`} />
@@ -151,34 +151,34 @@ export default function DashboardPage() {
             Closed Accounts
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" data-testid="closed-accounts-summary">
-            <Card className="border-l-4 border-l-slate-400">
+            <Card className="border-l-4 border-l-slate-500">
               <CardContent className="p-6">
-                <p className="text-sm font-medium text-slate-400">Closed - Landed</p>
-                <p className="text-xl font-bold font-mono text-slate-500 mt-2 tabular-nums">
+                <p className="text-sm font-medium text-secondary-ink">Closed - Landed</p>
+                <p className="text-xl font-bold font-mono text-primary-ink mt-2 tabular-nums">
                   {formatCurrency(summary?.closed_total_landed_amount)}
                 </p>
               </CardContent>
             </Card>
-            <Card className="border-l-4 border-l-slate-400">
+            <Card className="border-l-4 border-l-slate-500">
               <CardContent className="p-6">
-                <p className="text-sm font-medium text-slate-400">Closed - Received</p>
-                <p className="text-xl font-bold font-mono text-slate-500 mt-2 tabular-nums">
+                <p className="text-sm font-medium text-secondary-ink">Closed - Received</p>
+                <p className="text-xl font-bold font-mono text-primary-ink mt-2 tabular-nums">
                   {formatCurrency(summary?.closed_total_received_amount)}
                 </p>
               </CardContent>
             </Card>
-            <Card className="border-l-4 border-l-slate-400">
+            <Card className="border-l-4 border-l-slate-500">
               <CardContent className="p-6">
-                <p className="text-sm font-medium text-slate-400">Closed - Pending</p>
-                <p className="text-xl font-bold font-mono text-slate-500 mt-2 tabular-nums">
+                <p className="text-sm font-medium text-secondary-ink">Closed - Pending</p>
+                <p className="text-xl font-bold font-mono text-primary-ink mt-2 tabular-nums">
                   {formatCurrency(summary?.closed_total_pending_amount)}
                 </p>
               </CardContent>
             </Card>
-            <Card className="border-l-4 border-l-slate-400">
+            <Card className="border-l-4 border-l-slate-500">
               <CardContent className="p-6">
-                <p className="text-sm font-medium text-slate-400">Closed - Interest</p>
-                <p className="text-xl font-bold font-mono text-slate-500 mt-2 tabular-nums">
+                <p className="text-sm font-medium text-secondary-ink">Closed - Interest</p>
+                <p className="text-xl font-bold font-mono text-primary-ink mt-2 tabular-nums">
                   {formatCurrency(summary?.closed_total_pending_interest)}
                 </p>
               </CardContent>

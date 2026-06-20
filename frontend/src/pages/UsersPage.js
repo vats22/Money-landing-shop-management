@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatDate } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { PasswordInput } from '../components/ui/PasswordInput';
 import { Select } from '../components/ui/Select';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { StatusBadge } from '../components/ui/Badge';
@@ -415,9 +416,8 @@ export default function UsersPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Password {!editingUser && '*'}
               </label>
-              <Input
+              <PasswordInput
                 data-testid="user-password"
-                type="password"
                 value={formData.password}
                 onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                 placeholder={editingUser ? 'Leave blank to keep current' : 'Enter password'}

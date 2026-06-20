@@ -1074,6 +1074,10 @@ export default function AccountFormPage() {
                     alt={`${selectedItemName} - ${currentImageIdx + 1}`}
                     className="w-full h-[350px] object-contain"
                     data-testid="form-main-image"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 fill=%22%23F1F5F9%22/><text x=%22100%22 y=%22100%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%2364748B%22 font-family=%22sans-serif%22 font-size=%2214%22>Image not available</text></svg>';
+                    }}
                   />
                   {selectedItemImages.length > 1 && (
                     <>
@@ -1113,7 +1117,16 @@ export default function AccountFormPage() {
                         i === currentImageIdx ? 'border-emerald-500' : 'border-transparent hover:border-slate-300'
                       }`}
                     >
-                      <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
+                      <img
+                        src={getImageUrl(img)}
+                        alt=""
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 fill=%22%23E2E8F0%22/><text x=%2232%22 y=%2236%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%2364748B%22 font-family=%22sans-serif%22 font-size=%2210%22>n/a</text></svg>';
+                        }}
+                      />
                     </button>
                   ))}
                 </div>

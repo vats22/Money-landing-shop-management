@@ -31,6 +31,7 @@ class UserUpdate(BaseModel):
 class JewelleryItem(BaseModel):
     name: str
     weight: float
+    images: Optional[List[dict]] = Field(default_factory=list)
 
 class LandedEntry(BaseModel):
     date: str
