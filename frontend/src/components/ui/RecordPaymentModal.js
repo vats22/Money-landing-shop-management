@@ -103,11 +103,11 @@ export function RecordPaymentModal({ open, onClose, accountId, openingDate, onPa
     setSubmitting(true);
     try {
       const resp = await api.post(`/api/accounts/${accountId}/received`, payload);
-      toast.success(`Payment of ${formatCurrency(numericAmount)} recorded`);
+      toast.success(`Receive amount of ${formatCurrency(numericAmount)} added`);
       onPaymentRecorded?.(resp.data);
       onClose();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to record payment');
+      toast.error(e.response?.data?.detail || 'Failed to add receive amount');
     } finally {
       setSubmitting(false);
     }
@@ -130,7 +130,7 @@ export function RecordPaymentModal({ open, onClose, accountId, openingDate, onPa
   const showAllocationEditor = (preview?.entries?.length || 0) >= 2;
 
   return (
-    <Modal isOpen={open} onClose={onClose} title="Record a Payment" size="lg">
+    <Modal isOpen={open} onClose={onClose} title="Add Receive Amount" size="lg">
       <div className="space-y-4">
         {/* Date + Amount */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -223,7 +223,7 @@ export function RecordPaymentModal({ open, onClose, accountId, openingDate, onPa
             Cancel
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={submitting || loading || numericAmount <= 0} data-testid="rp-submit">
-            {submitting ? <Spinner size="sm" className="text-white" /> : 'Record Payment'}
+            {submitting ? <Spinner size="sm" className="text-white" /> : 'Add Receive Amount'}
           </Button>
         </div>
       </div>

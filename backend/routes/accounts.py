@@ -723,12 +723,9 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
             payment_date = payment_date.replace(tzinfo=timezone.utc)
         payment_amount = float(ref.get("amount", 0) or 0)
 
-        # Capture per-entry interest snapshot at payment_date
+        # Snapshot per-entry interest at payment_date BEFORE applying
         breakdown = []
-        total_interest_due = 0.0
         for le in active:
-            if le["remaining_principal"] <= 0:
-                continue
             try:
                 isd = datetime.fromisoformat(le["interest_start_date"])
             except Exception:
@@ -736,12 +733,13 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
             if isd.tzinfo is None:
                 isd = isd.replace(tzinfo=timezone.utc)
             days = max(0, (payment_date - isd).days)
-            calc_int = (le["remaining_principal"] * le["rate"] * days) / (100 * 30)
+            rp = le["remaining_principal"]
+            calc_int = (rp * le["rate"] * days) / (100 * 30) if rp > 0 else 0.0
             interest_due = round(calc_int + le["carried_forward_interest"], 2)
             breakdown.append({
                 "landed_date": le["date"],
                 "interest_start_date": le["interest_start_date"],
-                "principal": round(le["remaining_principal"], 2),
+                "principal": round(rp, 2),
                 "rate": le["rate"],
                 "days": days,
                 "calculated_interest": round(calc_int, 2),
@@ -749,50 +747,78 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
                 "interest_due": interest_due,
                 "interest_paid": 0.0,
                 "principal_paid": 0.0,
-                "_le": le,  # internal ref for matching
+                "_le": le,
             })
-            total_interest_due += interest_due
 
-        remaining = payment_amount
+        total_interest_due = round(sum(b["interest_due"] for b in breakdown), 2)
         interest_paid_total = 0.0
         principal_paid_total = 0.0
 
-        if remaining >= total_interest_due:
-            # Full interest cleared
-            interest_paid_total = total_interest_due
-            remaining -= total_interest_due
-            for b in breakdown:
-                b["interest_paid"] = b["interest_due"]
-                b["_le"]["carried_forward_interest"] = 0.0
-                b["_le"]["interest_start_date"] = ref.get("date", "")
-            # FIFO principal repayment
-            for le in active:
-                if remaining <= 0:
-                    break
-                if le["remaining_principal"] <= 0:
+        # Determine allocation order. Prefer the AUTHORITATIVE per-entry allocations
+        # stored on the received entry (post-iter18 migration). Fall back to
+        # sequential FIFO if missing (legacy rows).
+        stored_allocs = ref.get("allocations") or []
+        if stored_allocs:
+            # Iterate in stored order. Each allocation tells us exactly how much
+            # interest + principal was applied to which landed entry index.
+            for sa in stored_allocs:
+                try:
+                    idx = int(sa.get("landed_index"))
+                except (TypeError, ValueError):
                     continue
-                pay_p = min(remaining, le["remaining_principal"])
-                le["remaining_principal"] -= pay_p
-                principal_paid_total += pay_p
-                remaining -= pay_p
+                if idx < 0 or idx >= len(active):
+                    continue
+                le = active[idx]
+                ip = round(float(sa.get("interest_paid", 0) or 0), 2)
+                pp = round(float(sa.get("principal_paid", 0) or 0), 2)
+                # Update the matching breakdown row
                 for b in breakdown:
                     if b["_le"] is le:
-                        b["principal_paid"] = round(b["principal_paid"] + pay_p, 2)
+                        b["interest_paid"] = round(b["interest_paid"] + ip, 2)
+                        b["principal_paid"] = round(b["principal_paid"] + pp, 2)
                         break
+                # Mutate live state to mirror the new algorithm
+                # Interest reset: any payment touches the entry → interest_start_date moves to payment date.
+                if ip > 0 or pp > 0:
+                    le["interest_start_date"] = ref.get("date", "")
+                if ip > 0:
+                    rem_int_after = float(sa.get("remaining_interest_after", 0) or 0)
+                    le["carried_forward_interest"] = round(rem_int_after, 2)
+                if pp > 0:
+                    le["remaining_principal"] = round(le["remaining_principal"] - pp, 2)
+                interest_paid_total += ip
+                principal_paid_total += pp
         else:
-            # Partial interest
-            interest_paid_total = remaining
-            if total_interest_due > 0:
-                for b in breakdown:
-                    if b["interest_due"] <= 0:
-                        continue
-                    proportion = b["interest_due"] / total_interest_due
-                    paid_for_this = round(remaining * proportion, 2)
-                    cf = round(b["interest_due"] - paid_for_this, 2)
-                    b["interest_paid"] = paid_for_this
-                    b["_le"]["carried_forward_interest"] = cf
-                    b["_le"]["interest_start_date"] = ref.get("date", "")
-            remaining = 0
+            # FALLBACK: legacy rows without per-entry allocations.
+            # Use the new sequential per-entry FIFO (oldest first):
+            #   for each active entry → pay interest first, then principal,
+            #   carry leftover to the next entry.
+            ordered = [b for b in breakdown if b["_le"]["remaining_principal"] > 0]
+            ordered.sort(key=lambda b: b["_le"]["date"])
+            remaining = payment_amount
+            for b in ordered:
+                if remaining <= 0:
+                    break
+                le = b["_le"]
+                interest_due = b["interest_due"]
+                # Apply to interest
+                ip = min(remaining, interest_due)
+                remaining -= ip
+                # Apply to principal
+                pp = min(remaining, le["remaining_principal"])
+                remaining -= pp
+                # Update breakdown
+                b["interest_paid"] = round(ip, 2)
+                b["principal_paid"] = round(pp, 2)
+                # Mutate live state
+                if ip >= interest_due:
+                    le["carried_forward_interest"] = 0.0
+                else:
+                    le["carried_forward_interest"] = round(interest_due - ip, 2)
+                le["interest_start_date"] = ref.get("date", "")
+                le["remaining_principal"] = round(le["remaining_principal"] - pp, 2)
+                interest_paid_total += ip
+                principal_paid_total += pp
 
         # Strip internal refs
         for b in breakdown:
@@ -808,6 +834,9 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
         new_interest_total = round(sum(b.get("calculated_interest", 0) for b in active_breakdown), 2)
         carried_total = round(sum(b.get("carried_forward", 0) for b in active_breakdown), 2)
 
+        # Method label
+        method_lbl = (ref.get("allocation_method") or "fifo").lower()
+
         if len(active_breakdown) == 1 and active_breakdown[0]["days"] > 0:
             b = active_breakdown[0]
             head = f"Interest for {b['days']} days @{b['rate']}% = {_fmt_inr(b['calculated_interest'])}"
@@ -821,11 +850,26 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
             head += f". Total {_fmt_inr(round(new_interest_total + carried_total, 2))}"
             notes_parts.append(head)
 
+        if method_lbl == "manual":
+            applied_to = ", ".join(
+                f"#{(sa.get('landed_index', 0) + 1)}: I {_fmt_inr(sa.get('interest_paid', 0))} + P {_fmt_inr(sa.get('principal_paid', 0))}"
+                for sa in (stored_allocs or [])
+            )
+            if applied_to:
+                notes_parts.append(f"Manual allocation → {applied_to}")
+        elif stored_allocs:
+            applied_to = ", ".join(
+                f"#{(sa.get('landed_index', 0) + 1)}: I {_fmt_inr(sa.get('interest_paid', 0))} + P {_fmt_inr(sa.get('principal_paid', 0))}"
+                for sa in stored_allocs
+            )
+            if applied_to:
+                notes_parts.append(f"Applied (FIFO) → {applied_to}")
+
         if interest_paid_total > 0 and principal_paid_total > 0 and remaining_interest_after == 0:
             notes_parts.append(f"Interest cleared, {_fmt_inr(principal_paid_total)} applied to principal")
         elif interest_paid_total > 0 and remaining_interest_after > 0:
             notes_parts.append(f"Partial interest paid, {_fmt_inr(remaining_interest_after)} carried forward")
-        elif interest_paid_total > 0 and principal_paid_total == 0:
+        elif interest_paid_total > 0 and principal_paid_total == 0 and remaining_interest_after == 0:
             notes_parts.append("Interest paid in full")
         elif principal_paid_total > 0 and interest_paid_total == 0:
             notes_parts.append(f"Principal reduced by {_fmt_inr(principal_paid_total)}")
@@ -845,6 +889,8 @@ async def get_enhanced_ledger(account_id: str, current_user: dict = Depends(veri
             "remaining_principal": round(running_principal, 2),
             "remaining_interest": remaining_interest_after,
             "computed_balance": round(running_principal + remaining_interest_after, 2),
+            "allocation_method": method_lbl,
+            "allocations": stored_allocs or [],
             "user_note": ref.get("note", "") or "",
             "breakdown": breakdown,
             "notes": notes,

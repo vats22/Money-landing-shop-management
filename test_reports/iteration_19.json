@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 19 verification — all 3 bug fixes pass. Backend: 10/10 pytest (5 new ledger-enhanced tests for ACC000011 + 5 iter-18 regression). Frontend: 4/4 UI checks (Add Receive Amount rename in trigger button, ledger Interest Breakdown shows FIFO and MANUAL badges with correct per-entry I+P values, mobile layout shows no horizontal overflow with Edit button fully visible).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration19_bug_fixes.py",
+    "/app/test_reports/pytest/pytest_results_iteration19.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/accounts.py is now 992 lines — at the upper limit; the get_enhanced_ledger function is ~280 lines and still duplicates chronological replay logic that is also present in services/financial.process_payment. Recommend extracting the per-payment-row 'apply allocation OR fallback to sequential FIFO walk' block into services/financial so the legacy fallback never drifts from the live algorithm.",
+    "The legacy-FIFO fallback in get_enhanced_ledger (lines 791-821) is dead code as long as the iter-18 migration ran for all rows — consider logging a warning when it triggers so unmigrated rows surface quickly.",
+    "AccountDetailPage.js is now ~1135 lines; ledger table row + expanded transaction-detail panel is a strong candidate to extract into <LedgerTable /> + <LedgerRowDetail />.",
+    "Manual allocation rounding tolerance of 0.01 is still in place; ok for now but consider centralizing with a shared MONEY_EPSILON constant."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration19_bug_fixes.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10)",
+    "frontend": "100% (4/4)"
+  },
+  "test_credentials": "admin / admin123 (from /app/memory/test_credentials.md). Login form uses unnamed inputs — use placeholder or index, not name attrs.",
+  "seed_data_creation": "None. Used existing ACC000011 (id 6a4116c735cfdeef5d7fd7d6) as provided.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter19 verified clean. New regression file: test_iteration19_bug_fixes.py. Preview-payment endpoint is /api/accounts/{id}/payments/preview?payment_date=YYYY-MM-DD (POST, query param). Manual allocations payload uses {landed_index, amount} (NOT interest_paid/principal_paid). Auth login returns key 'token' not 'access_token'. Login input fields have no name attribute — use placeholder selector or index. ledger-row-2 = ₹10,000 FIFO payment, ledger-row-3 = ₹5,000 MANUAL payment for ACC000011. Only one transaction-detail panel can be expanded at a time on the ledger UI.",
+  "verification_details": {
+    "bug1_ledger_calc_fifo_10000": "PASS — breakdown[0]={landed_date:'2026-02-01', days:147, calculated_interest:15312.5, interest_paid:10000.0, principal_paid:0.0}; breakdown[1]={interest_paid:0.0, principal_paid:0.0}. allocation_method='fifo'. Notes contain 'Applied (FIFO) → #1: I ₹10,000.00 + P ₹0.00'.",
+    "bug1_ledger_calc_manual_5000": "PASS — breakdown[0]={carried_forward:5312.5, interest_paid:2000, principal_paid:0}; breakdown[1]={calculated_interest:2291.67, interest_paid:2291.67, principal_paid:708.33}. allocation_method='manual'. Notes contain 'Manual allocation → #1: I ₹2,000.00 + P ₹0.00, #2: I ₹2,291.67 + P ₹708.33'.",
+    "bug1_no_legacy_proportional": "PASS — values 8698.22, 1301.78, 4349.11 are absent from breakdown.",
+    "bug2_ui_method_badge_fifo": "PASS — clicking ledger-row-2 expands Interest Breakdown header with green FIFO badge.",
+    "bug2_ui_method_badge_manual": "PASS — clicking ledger-row-3 expands Interest Breakdown header with blue MANUAL badge.",
+    "bug3_button_rename": "PASS — record-payment-btn label='Add Receive Amount'; RecordPaymentModal title/submit/toast all use 'Add Receive Amount' / 'Receive amount of ₹X added'. No remaining 'Record Payment' strings outside legacy comments.",
+    "bug4_mobile_no_horizontal_overflow": "PASS — body.scrollWidth=390 == body.clientWidth=390 at 390x844 viewport.",
+    "bug4_mobile_edit_btn_full_width": "PASS — edit-account-btn box {x:16,y:240,width:358,height:40} fully within 390px viewport.",
+    "bug4_mobile_zone_layout": "PASS — Excel/PDF icons row, then Add Receive Amount (x:16,w:194) + Close (x:218,w:156) row, then Edit full-width below.",
+    "iter18_regression_opening_date_locked": "PASS — PUT with changed opening_date returns 400.",
+    "iter18_regression_received_before_opening": "PASS — POST /received with date < opening returns 400.",
+    "iter18_regression_preview_payment_endpoint": "PASS — returns entries[] with landed_index/interest_due/outstanding for valid date.",
+    "iter18_regression_preview_payment_before_opening": "PASS — returns 400.",
+    "iter18_regression_manual_sum_mismatch": "PASS — sum(allocations.amount) != amount returns 400."
+  }
+}

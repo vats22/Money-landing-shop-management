@@ -172,57 +172,69 @@ export default function AccountDetailPage() {
   return (
     <div className="space-y-6 animate-fadeIn" data-testid="account-detail-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/accounts')} className="p-2 hover:bg-slate-100 rounded-lg transition-colors" data-testid="back-btn">
+      <div className="space-y-3">
+        {/* Top row: Back + Account number + Status */}
+        <div className="flex items-start gap-3">
+          <button onClick={() => navigate('/accounts')} className="p-2 -ml-2 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0" data-testid="back-btn">
             <ArrowLeft className="h-5 w-5 text-slate-600" />
           </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold font-display text-slate-900" data-testid="account-number">{account.account_number}</h1>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold font-display text-slate-900 leading-tight" data-testid="account-number">{account.account_number}</h1>
               <StatusBadge status={account.status} />
             </div>
-            <p className="text-slate-500 mt-1">{account.name} - {account.village}</p>
+            <p className="text-sm text-secondary-ink mt-0.5 truncate">{account.name} · {account.village}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => handleExport('excel')} data-testid="export-excel-btn" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600" title="Export to Excel">
-            <FileSpreadsheet className="h-5 w-5" />
-          </button>
-          <button onClick={() => handleExport('pdf')} data-testid="export-pdf-btn" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600" title="Export to PDF">
-            <Download className="h-5 w-5" />
-          </button>
-          {/* Record Payment */}
-          {account.status !== 'closed' && account.user_can_add && (
-            <Button
-              onClick={() => setShowRecordPaymentModal(true)}
-              data-testid="record-payment-btn"
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <TrendingDown className="h-4 w-4 mr-2" />
-              Record Payment
-            </Button>
-          )}
-          {/* Close Account */}
-          {account.status !== 'closed' && account.user_can_close && (
-            <Button onClick={() => setShowCloseModal(true)} variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" data-testid="close-account-btn">
-              <Lock className="h-4 w-4 mr-2" />
-              Close Account
-            </Button>
-          )}
-          {/* Reopen Account */}
-          {account.status === 'closed' && account.user_can_unlock && (
-            <Button onClick={() => setShowReopenModal(true)} variant="outline" className="text-emerald-600 border-emerald-300 hover:bg-emerald-50" data-testid="reopen-account-btn">
-              <Unlock className="h-4 w-4 mr-2" />
-              Reopen Account
-            </Button>
-          )}
-          {/* Edit button */}
-          {account.user_can_edit && (
-            <Link to={`/accounts/${id}/edit`}>
-              <Button data-testid="edit-account-btn"><Pencil className="h-4 w-4 mr-2" />Edit</Button>
-            </Link>
-          )}
+
+        {/* Action bar — two zones: secondary (icon-only) + primary (labeled) */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Secondary actions (icon buttons) */}
+          <div className="flex items-center gap-1 mr-auto">
+            <button onClick={() => handleExport('excel')} data-testid="export-excel-btn" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 tap-target" title="Export to Excel" aria-label="Export to Excel">
+              <FileSpreadsheet className="h-5 w-5" />
+            </button>
+            <button onClick={() => handleExport('pdf')} data-testid="export-pdf-btn" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 tap-target" title="Export to PDF" aria-label="Export to PDF">
+              <Download className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Primary actions (labeled, wraps to full width on mobile) */}
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* Add Receive Amount (primary CTA) */}
+            {account.status !== 'closed' && account.user_can_add && (
+              <Button
+                onClick={() => setShowRecordPaymentModal(true)}
+                data-testid="record-payment-btn"
+                className="bg-blue-600 hover:bg-blue-700 text-white flex-1 sm:flex-none whitespace-nowrap"
+              >
+                <TrendingDown className="h-4 w-4 mr-1.5" />
+                Add Receive Amount
+              </Button>
+            )}
+            {/* Close Account */}
+            {account.status !== 'closed' && account.user_can_close && (
+              <Button onClick={() => setShowCloseModal(true)} variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 flex-1 sm:flex-none whitespace-nowrap" data-testid="close-account-btn">
+                <Lock className="h-4 w-4 mr-1.5" />
+                Close
+              </Button>
+            )}
+            {/* Reopen Account */}
+            {account.status === 'closed' && account.user_can_unlock && (
+              <Button onClick={() => setShowReopenModal(true)} variant="outline" className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 flex-1 sm:flex-none whitespace-nowrap" data-testid="reopen-account-btn">
+                <Unlock className="h-4 w-4 mr-1.5" />
+                Reopen
+              </Button>
+            )}
+            {/* Edit button */}
+            {account.user_can_edit && (
+              <Link to={`/accounts/${id}/edit`} className="flex-1 sm:flex-none">
+                <Button data-testid="edit-account-btn" className="w-full whitespace-nowrap">
+                  <Pencil className="h-4 w-4 mr-1.5" />Edit
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
@@ -794,8 +806,20 @@ export default function AccountDetailPage() {
                                     {/* Per-entry breakdown for PAYMENT rows */}
                                     {isPayment && Array.isArray(entry.breakdown) && entry.breakdown.length > 0 && (
                                       <div className="px-5 py-4">
-                                        <div className="flex items-center gap-2 mb-2">
+                                        <div className="flex items-center gap-2 mb-2 flex-wrap">
                                           <p className="font-semibold text-primary-ink text-xs uppercase tracking-wider">Interest Breakdown</p>
+                                          {entry.allocation_method && (
+                                            <span
+                                              className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${
+                                                entry.allocation_method === 'manual'
+                                                  ? 'bg-blue-100 text-blue-800'
+                                                  : 'bg-emerald-100 text-emerald-800'
+                                              }`}
+                                              title={entry.allocation_method === 'manual' ? 'User-selected per-entry allocation' : 'Automatic FIFO — oldest landed entry first'}
+                                            >
+                                              {entry.allocation_method === 'manual' ? 'Manual' : 'FIFO'}
+                                            </span>
+                                          )}
                                           <span className="inline-flex items-center gap-1 text-[10px] text-secondary-ink bg-slate-100 px-2 py-0.5 rounded-full" title="Total Interest = New Interest + Previous Pending (Carry Forward) Interest">
                                             <span className="text-muted-ink">ⓘ</span>
                                             Total = New + Carry Forward
