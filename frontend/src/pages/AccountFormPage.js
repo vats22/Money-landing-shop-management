@@ -12,6 +12,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
 import NoteEditor from '../components/ui/NoteEditor';
+import { PaymentAllocationEditor } from '../components/ui/PaymentAllocationEditor';
 import {
   ArrowLeft, Plus, Trash2, Gem, TrendingUp, TrendingDown, Save,
   Image as ImageIcon, Upload, Camera, X, ChevronLeft, ChevronRight, FileText,
@@ -119,7 +120,12 @@ export default function AccountFormPage() {
         landed_entries: account.landed_entries?.length > 0 
           ? account.landed_entries.map(e => ({ ...e, note: e.note || '' }))
           : [{ date: '', amount: '', interest_rate: '2', note: '' }],
-        received_entries: (account.received_entries || []).map(e => ({ ...e, note: e.note || '' }))
+        received_entries: (account.received_entries || []).map(e => ({
+          ...e,
+          note: e.note || '',
+          allocation_method: e.allocation_method || 'fifo',
+          allocations: (e.allocations || []).map(a => ({ landed_index: a.landed_index, amount: a.amount })),
+        }))
       });
     } catch (error) {
       toast.error('Failed to fetch account');
@@ -186,7 +192,10 @@ export default function AccountFormPage() {
   const addReceivedEntry = () => {
     setFormData(prev => ({
       ...prev,
-      received_entries: [...prev.received_entries, { date: new Date().toISOString().split('T')[0], amount: '', note: '' }]
+      received_entries: [
+        ...prev.received_entries,
+        { date: new Date().toISOString().split('T')[0], amount: '', note: '', allocation_method: 'fifo', allocations: [] }
+      ]
     }));
   };
 
@@ -200,8 +209,17 @@ export default function AccountFormPage() {
   const updateReceivedEntry = (index, field, value) => {
     setFormData(prev => ({
       ...prev,
-      received_entries: prev.received_entries.map((entry, i) => 
+      received_entries: prev.received_entries.map((entry, i) =>
         i === index ? { ...entry, [field]: value } : entry
+      )
+    }));
+  };
+
+  const updateReceivedAllocation = (index, partial) => {
+    setFormData(prev => ({
+      ...prev,
+      received_entries: prev.received_entries.map((entry, i) =>
+        i === index ? { ...entry, ...partial } : entry
       )
     }));
   };
@@ -486,13 +504,31 @@ export default function AccountFormPage() {
       
       const received_entries = formData.received_entries
         .filter(entry => entry.date && parseFloat(entry.amount) > 0)
-        .map(entry => ({
-          date: entry.date,
-          amount: parseFloat(entry.amount),
-          note: DOMPurify.sanitize(entry.note || ''),
-          principal_paid: entry.principal_paid !== undefined ? parseFloat(entry.principal_paid) : 0,
-          interest_paid: entry.interest_paid !== undefined ? parseFloat(entry.interest_paid) : 0
-        }));
+        .map(entry => {
+          const method = (entry.allocation_method || 'fifo').toLowerCase();
+          const allocs = (entry.allocations || [])
+            .filter(a => parseFloat(a.amount) > 0)
+            .map(a => ({ landed_index: parseInt(a.landed_index, 10), amount: parseFloat(a.amount) }));
+          return {
+            date: entry.date,
+            amount: parseFloat(entry.amount),
+            note: DOMPurify.sanitize(entry.note || ''),
+            principal_paid: entry.principal_paid !== undefined ? parseFloat(entry.principal_paid) : 0,
+            interest_paid: entry.interest_paid !== undefined ? parseFloat(entry.interest_paid) : 0,
+            allocation_method: method === 'manual' && allocs.length > 0 ? 'manual' : 'fifo',
+            allocations: method === 'manual' && allocs.length > 0 ? allocs : null,
+          };
+        });
+
+      // Client-side guard: manual allocations must sum to receiving amount
+      const badManual = received_entries.find(r => r.allocation_method === 'manual' && Math.abs(
+        (r.allocations || []).reduce((s, a) => s + a.amount, 0) - r.amount
+      ) > 0.01);
+      if (badManual) {
+        toast.error(`Manual allocation for payment on ${badManual.date} must add up to ₹${badManual.amount.toFixed(2)}.`);
+        setSaving(false);
+        return;
+      }
 
       // Sanitize HTML details
       const sanitizedDetails = DOMPurify.sanitize(formData.details);
@@ -631,6 +667,7 @@ export default function AccountFormPage() {
               <div>
                 <label className="block text-[11px] font-semibold text-secondary-ink uppercase tracking-wider mb-1.5">
                   Opening Date <span className="text-danger-ink">*</span>
+                  {isEdit && <span className="ml-2 normal-case tracking-normal text-[10px] text-muted-ink font-normal">(locked after creation)</span>}
                 </label>
                 <Input
                   data-testid="opening-date"
@@ -640,7 +677,10 @@ export default function AccountFormPage() {
                   onChange={handleChange}
                   max={today}
                   required
-                  className="tap-target"
+                  disabled={isEdit}
+                  readOnly={isEdit}
+                  className={`tap-target ${isEdit ? 'bg-slate-100 text-secondary-ink cursor-not-allowed' : ''}`}
+                  title={isEdit ? 'Opening Date cannot be changed after account creation' : ''}
                 />
               </div>
               <div>
@@ -967,6 +1007,25 @@ export default function AccountFormPage() {
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </button>
                     </div>
+
+                    {/* Allocation editor — only when ≥2 landed entries */}
+                    {formData.landed_entries.filter(le => le.date && parseFloat(le.amount) > 0).length >= 2 && (
+                      <PaymentAllocationEditor
+                        landedEntries={formData.landed_entries.map(le => ({
+                          date: le.date,
+                          amount: parseFloat(le.amount) || 0,
+                          interest_rate: parseFloat(le.interest_rate) || 2,
+                          remaining_principal: parseFloat(le.amount) || 0,
+                        }))}
+                        receivingAmount={parseFloat(entry.amount) || 0}
+                        allocationMethod={entry.allocation_method || 'fifo'}
+                        allocations={entry.allocations || []}
+                        onChange={(partial) => updateReceivedAllocation(index, partial)}
+                        testIdPrefix={`received-${index}`}
+                        paymentDate={entry.date}
+                      />
+                    )}
+
                     {/* Note toggle / editor */}
                     <div className="mt-2">
                       {!openReceivedNote[index] && !((entry.note || '').trim()) ? (
@@ -1055,9 +1114,8 @@ export default function AccountFormPage() {
         </div>
       </form>
 
-      {/* Image Viewer/Upload Modal */}
-      {isEdit && (
-        <Modal isOpen={showImageModal} onClose={() => { setShowImageModal(false); closeCamera(); }} title={`Images - ${selectedItemName}`} size="lg">
+      {/* Image Viewer/Upload Modal — works in BOTH Add and Edit modes */}
+      <Modal isOpen={showImageModal} onClose={() => { setShowImageModal(false); closeCamera(); }} title={`Images - ${selectedItemName}`} size="lg">
           <div className="space-y-4">
             {selectedItemImages.length === 0 && !showCamera ? (
               <div className="flex flex-col items-center justify-center py-12 text-slate-400">
@@ -1174,14 +1232,22 @@ export default function AccountFormPage() {
             {/* Upload Section */}
             {!showCamera && selectedItemImages.length < MAX_IMAGES && (
               <div className="border-t border-slate-200 pt-4">
-                <p className="text-xs text-slate-500 mb-3">
-                  {MAX_IMAGES - selectedItemImages.length} more image(s) can be added
+                <p className="text-xs text-secondary-ink mb-3">
+                  {MAX_IMAGES - selectedItemImages.length} more image(s) can be added — JPG, PNG, WebP, HEIC, max 10MB each
                 </p>
                 <div className="flex gap-2">
-                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+                    multiple
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    data-testid="form-image-file-input"
+                  />
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); fileInputRef.current?.click(); }}
                     disabled={uploading}
                     data-testid="form-upload-device-btn"
                     className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
@@ -1204,7 +1270,6 @@ export default function AccountFormPage() {
             )}
           </div>
         </Modal>
-      )}
 
       {/* Delete Entry Confirmation Dialog */}
       <ConfirmDialog

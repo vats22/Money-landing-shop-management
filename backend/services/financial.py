@@ -1,5 +1,27 @@
+"""
+Financial services for LendLedger.
+
+Payment-allocation algorithm (rewritten Jun 2026, iteration 18):
+
+Each receiving (payment) is applied to landed entries SEQUENTIALLY, not pro-rata.
+For each landed entry in the allocation order:
+    1. compute total interest currently due (calculated since interest_start_date + any
+       previously-carried interest),
+    2. apply payment to that interest first,
+    3. apply any remainder to that entry's principal,
+    4. roll any leftover forward to the next entry in the order.
+
+Order:
+    * FIFO (default) — landed entries sorted by date ascending. Entries created
+      AFTER the payment date are skipped.
+    * Manual — caller supplies an ordered list of {landed_index, amount} pairs;
+      each pair is applied to the named entry (still interest-first-then-principal
+      within that entry). Any "amount" on a manual allocation is the total
+      assigned to that entry — not split further by the caller.
+"""
+
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 from config import ledger_collection
 
 
@@ -15,7 +37,7 @@ def _remaining_principal(entry: dict) -> float:
 
 
 def _entry_existed_at_payment(entry: dict, payment_date: datetime) -> bool:
-    """Check if a landed entry existed on or before the payment date"""
+    """Check if a landed entry existed on or before the payment date."""
     entry_date_str = entry.get("date", "")
     if not entry_date_str:
         return True
@@ -28,8 +50,9 @@ def _entry_existed_at_payment(entry: dict, payment_date: datetime) -> bool:
 
 def calculate_interest_for_entry(landed_entry: dict, calc_date: datetime) -> dict:
     """
-    Calculate interest for a single landed entry up to calc_date
-    Formula: Interest = (Principal x Rate x Days) / (100 x 30)
+    Interest for a single landed entry up to calc_date.
+    Formula: Interest = (Remaining_Principal x Rate x Days) / (100 x 30)
+    Days are counted from interest_start_date (or first landed date).
     """
     try:
         interest_start_date_str = landed_entry.get("interest_start_date") or landed_entry.get("date")
@@ -48,7 +71,13 @@ def calculate_interest_for_entry(landed_entry: dict, calc_date: datetime) -> dic
 
         remaining_principal = _remaining_principal(landed_entry)
         if remaining_principal <= 0:
-            return {"interest": 0.0, "days": 0, "interest_start_date": interest_start_date_str}
+            return {
+                "interest": 0.0,
+                "calculated_interest": 0.0,
+                "carried_forward_interest": float(landed_entry.get("carried_forward_interest", 0.0) or 0.0),
+                "days": 0,
+                "interest_start_date": interest_start_date_str,
+            }
 
         interest_rate = float(landed_entry.get("interest_rate", 2) or 2)
         days = max(0, (calc_date - interest_start_date).days)
@@ -61,7 +90,7 @@ def calculate_interest_for_entry(landed_entry: dict, calc_date: datetime) -> dic
             "calculated_interest": round(calculated_interest, 2),
             "carried_forward_interest": round(carried_forward, 2),
             "days": days,
-            "interest_start_date": interest_start_date_str
+            "interest_start_date": interest_start_date_str,
         }
     except Exception as e:
         print(f"Error calculating interest: {e}")
@@ -74,7 +103,7 @@ def get_total_interest_for_entry(landed_entry: dict, calc_date: datetime) -> flo
 
 
 def calculate_account_totals(account: dict) -> dict:
-    """Calculate all account totals including interest"""
+    """Calculate all account totals including interest."""
     now = datetime.now(timezone.utc)
     total_landed = sum(float(entry.get("amount", 0) or 0) for entry in account.get("landed_entries", []))
     total_received = sum(float(entry.get("amount", 0) or 0) for entry in account.get("received_entries", []))
@@ -100,79 +129,176 @@ def calculate_account_totals(account: dict) -> dict:
         "total_pending_amount": round(total_pending_principal, 2),
         "total_interest_amount": round(total_pending_interest, 2),
         "total_pending_interest": round(total_pending_interest, 2),
-        "total_jewellery_weight": round(total_jewellery_weight, 2)
+        "total_jewellery_weight": round(total_jewellery_weight, 2),
     }
 
 
-def process_payment(landed_entries: List[dict], payment_amount: float, payment_date: datetime) -> tuple:
-    """
-    Process payment: interest first (for entries that existed at payment date), then principal (FIFO).
-    Entries created AFTER payment date are not affected.
-    """
-    remaining_payment = float(payment_amount)
-    total_interest_paid = 0.0
-    total_principal_paid = 0.0
-    remaining_interest_after_payment = 0.0
+# ============================================================================
+# NEW sequential-per-entry payment processing
+# ============================================================================
 
-    total_interest_due = 0.0
-    entry_interests = []
-    for entry in landed_entries:
-        if not _entry_existed_at_payment(entry, payment_date):
-            entry_interests.append(0.0)
-            continue
-        remaining_principal = _remaining_principal(entry)
-        if remaining_principal > 0:
-            entry_interest = get_total_interest_for_entry(entry, payment_date)
-            entry_interests.append(entry_interest)
-            total_interest_due += entry_interest
-        else:
-            entry_interests.append(0.0)
+def _apply_payment_to_entry(entry: dict, amount: float, payment_date: datetime) -> tuple:
+    """
+    Apply `amount` to a single landed entry. Interest first, then principal.
 
-    if remaining_payment >= total_interest_due:
-        total_interest_paid = total_interest_due
-        remaining_payment -= total_interest_due
-        for entry in landed_entries:
-            if _entry_existed_at_payment(entry, payment_date):
-                entry["carried_forward_interest"] = 0.0
-                entry["interest_start_date"] = payment_date.isoformat()
-        for entry in landed_entries:
-            if remaining_payment <= 0:
-                break
-            if not _entry_existed_at_payment(entry, payment_date):
-                continue
-            remaining_principal = _remaining_principal(entry)
-            if remaining_principal > 0:
-                principal_payment = min(remaining_payment, remaining_principal)
-                entry["remaining_principal"] = remaining_principal - principal_payment
-                total_principal_paid += principal_payment
-                remaining_payment -= principal_payment
+    Mutates `entry` in place (updates remaining_principal, carried_forward_interest,
+    interest_start_date).
+
+    Returns: (interest_paid, principal_paid, remaining_interest_on_entry, leftover_amount)
+    """
+    if amount <= 0:
+        return 0.0, 0.0, float(entry.get("carried_forward_interest", 0.0) or 0.0), 0.0
+
+    if not _entry_existed_at_payment(entry, payment_date):
+        # Cannot pay an entry that didn't yet exist; return full amount as leftover
+        return 0.0, 0.0, float(entry.get("carried_forward_interest", 0.0) or 0.0), amount
+
+    remaining_principal = _remaining_principal(entry)
+    if remaining_principal <= 0:
+        # Entry is fully paid; no interest accrues; nothing to settle here
+        return 0.0, 0.0, 0.0, amount
+
+    interest_due = get_total_interest_for_entry(entry, payment_date)
+    interest_paid = min(amount, interest_due)
+    amount_after_interest = amount - interest_paid
+
+    # Always reset interest_start_date when ANY payment touches the entry — going
+    # forward the entry recomputes interest from this date on its (possibly reduced)
+    # remaining_principal.
+    entry["interest_start_date"] = payment_date.isoformat()
+
+    if interest_paid >= interest_due:
+        # Interest fully cleared
+        entry["carried_forward_interest"] = 0.0
+        remaining_interest_on_entry = 0.0
     else:
-        total_interest_paid = remaining_payment
-        remaining_interest_after_payment = total_interest_due - remaining_payment
-        if total_interest_due > 0:
-            for i, entry in enumerate(landed_entries):
-                if not _entry_existed_at_payment(entry, payment_date):
-                    continue
-                remaining_principal = _remaining_principal(entry)
-                if remaining_principal > 0 and entry_interests[i] > 0:
-                    proportion = entry_interests[i] / total_interest_due
-                    entry_remaining_interest = remaining_interest_after_payment * proportion
-                    entry["carried_forward_interest"] = round(entry_remaining_interest, 2)
-                    entry["interest_start_date"] = payment_date.isoformat()
+        # Partial interest payment — carry the unpaid interest forward
+        carry = round(interest_due - interest_paid, 2)
+        entry["carried_forward_interest"] = carry
+        remaining_interest_on_entry = carry
 
-    return landed_entries, round(total_principal_paid, 2), round(total_interest_paid, 2), round(remaining_interest_after_payment, 2)
+    # Apply remaining amount to principal
+    principal_paid = min(amount_after_interest, remaining_principal)
+    entry["remaining_principal"] = round(remaining_principal - principal_paid, 2)
+    leftover = round(amount_after_interest - principal_paid, 2)
 
+    return (
+        round(interest_paid, 2),
+        round(principal_paid, 2),
+        remaining_interest_on_entry,
+        leftover,
+    )
+
+
+def process_payment(
+    landed_entries: List[dict],
+    payment_amount: float,
+    payment_date: datetime,
+    allocations: Optional[List[dict]] = None,
+):
+    """
+    Sequentially apply payment to landed entries.
+
+    Args:
+        landed_entries: list of landed entries (will be mutated in place)
+        payment_amount: total receiving amount
+        payment_date: payment date
+        allocations: optional list of {landed_index, amount} for MANUAL mode.
+                     If None or empty, FIFO order is used and `payment_amount`
+                     is applied entry-by-entry until exhausted.
+
+    Returns:
+        (landed_entries, total_principal_paid, total_interest_paid,
+         total_remaining_interest, per_entry_allocations)
+
+    per_entry_allocations is a list of dicts each with:
+        landed_index, landed_date, amount, interest_paid, principal_paid,
+        remaining_interest_after.
+    """
+    total_principal = 0.0
+    total_interest = 0.0
+    per_entry = []
+
+    if allocations:
+        # MANUAL MODE
+        for alloc in allocations:
+            try:
+                idx = int(alloc.get("landed_index"))
+                amt = float(alloc.get("amount", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if idx < 0 or idx >= len(landed_entries) or amt <= 0:
+                continue
+            entry = landed_entries[idx]
+            ip, pp, rem_int, leftover = _apply_payment_to_entry(entry, amt, payment_date)
+            if ip > 0 or pp > 0:
+                per_entry.append({
+                    "landed_index": idx,
+                    "landed_date": entry.get("date", ""),
+                    "amount": round(ip + pp, 2),
+                    "interest_paid": ip,
+                    "principal_paid": pp,
+                    "remaining_interest_after": rem_int,
+                })
+            total_principal += pp
+            total_interest += ip
+            # In manual mode any leftover within an entry's allocation is intentional —
+            # caller chose to send more than this entry needed. We do NOT cascade it,
+            # mirroring the user's intent.
+    else:
+        # FIFO MODE — sequential per entry, oldest first
+        indexed = [
+            (i, e) for i, e in enumerate(landed_entries)
+            if _entry_existed_at_payment(e, payment_date)
+        ]
+        indexed.sort(key=lambda x: x[1].get("date", ""))
+
+        remaining = float(payment_amount)
+        for idx, entry in indexed:
+            if remaining <= 0:
+                break
+            ip, pp, rem_int, leftover = _apply_payment_to_entry(entry, remaining, payment_date)
+            if ip > 0 or pp > 0:
+                per_entry.append({
+                    "landed_index": idx,
+                    "landed_date": entry.get("date", ""),
+                    "amount": round(ip + pp, 2),
+                    "interest_paid": ip,
+                    "principal_paid": pp,
+                    "remaining_interest_after": rem_int,
+                })
+            total_principal += pp
+            total_interest += ip
+            remaining = leftover
+
+    total_remaining_interest = sum(
+        float(e.get("carried_forward_interest", 0.0) or 0.0) for e in landed_entries
+    )
+
+    return (
+        landed_entries,
+        round(total_principal, 2),
+        round(total_interest, 2),
+        round(total_remaining_interest, 2),
+        per_entry,
+    )
+
+
+# ============================================================================
+# Ledger helpers
+# ============================================================================
 
 async def create_ledger_entry(account_id: str, transaction_type: str, amount: float,
-                             principal_amount: float, interest_amount: float,
-                             balance_amount: float, created_by: str, transaction_date: str = None,
-                             remaining_interest: float = 0.0, remaining_principal: float = 0.0):
+                              principal_amount: float, interest_amount: float,
+                              balance_amount: float, created_by: str, transaction_date: str = None,
+                              remaining_interest: float = 0.0, remaining_principal: float = 0.0,
+                              allocations: Optional[List[dict]] = None):
     if transaction_date:
         try:
             txn_date = datetime.fromisoformat(transaction_date)
             if txn_date.tzinfo is None:
                 txn_date = txn_date.replace(tzinfo=timezone.utc)
-        except:
+        except Exception:
             txn_date = datetime.now(timezone.utc)
     else:
         txn_date = datetime.now(timezone.utc)
@@ -187,14 +313,15 @@ async def create_ledger_entry(account_id: str, transaction_type: str, amount: fl
         "balance_amount": balance_amount,
         "remaining_interest": remaining_interest,
         "remaining_principal": remaining_principal,
+        "allocations": allocations or [],
         "created_by": created_by,
-        "created_at": datetime.now(timezone.utc)
+        "created_at": datetime.now(timezone.utc),
     }
     await ledger_collection.insert_one(ledger_entry)
 
 
 async def generate_chronological_ledger(account_id: str, landed_entries: list, received_entries: list, created_by: str):
-    """Generate ledger entries in chronological order for correct running balance"""
+    """Generate ledger entries in chronological order for a correct running balance."""
     all_entries = []
     for entry in landed_entries:
         all_entries.append({"type": "LANDED", "date": entry["date"], "data": entry})
@@ -210,7 +337,7 @@ async def generate_chronological_ledger(account_id: str, landed_entries: list, r
             await create_ledger_entry(
                 account_id, "LANDED", entry["amount"], entry["amount"], 0,
                 running_balance, created_by, entry["date"],
-                remaining_interest=0.0, remaining_principal=running_balance
+                remaining_interest=0.0, remaining_principal=running_balance,
             )
         else:
             running_balance -= float(entry.get("principal_paid", 0))
@@ -219,5 +346,6 @@ async def generate_chronological_ledger(account_id: str, landed_entries: list, r
                 entry.get("principal_paid", 0), entry.get("interest_paid", 0),
                 running_balance, created_by, entry["date"],
                 remaining_interest=float(entry.get("remaining_interest", 0)),
-                remaining_principal=running_balance
+                remaining_principal=running_balance,
+                allocations=entry.get("allocations", []),
             )

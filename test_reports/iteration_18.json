@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 18 verification — all 4 bug fixes pass. Backend: 10/10 pytest cases green (date validation, opening_date lock, FIFO allocations, manual validations, preview endpoint). Frontend: 6/6 UI flows green (Add-mode image modal opens, single image viewer, opening-date locked & label, Record Payment modal with manual allocation, embedded PaymentAllocationEditor in edit form, Received tab shows Method + Applied-To columns with per-entry I+P breakdown).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration18_bug_fixes.py",
+    "/app/test_reports/pytest/pytest_results_iteration18.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/accounts.py is ~950 lines and is at the upper limit of comfortable file size; the /ledger-enhanced endpoint duplicates a lot of payment-allocation logic already centralised in services/financial.process_payment. Refactor opportunity: extract chronological replay into services/financial so /ledger-enhanced stays in sync with the new sequential-per-entry algorithm (currently it still uses an OLDER aggregate FIFO model with proportional partial-interest distribution, which can drift from the actual stored breakdown after manual allocations).",
+    "Manual allocations currently allow amount to exceed an entry's outstanding by 0.01 tolerance — acceptable, but consider explicit floor/ceil rounding everywhere to avoid edge cases on multi-entry allocations.",
+    "AccountFormPage.js is reported by main agent to be >1100 lines (embedded PaymentAllocationEditor + image modal + jewellery + form sections). Worth splitting into sub-components for maintainability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration18_bug_fixes.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10)",
+    "frontend": "100% (6/6)"
+  },
+  "test_credentials": "admin / admin123 (loaded from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Used existing ACC000005 (6a3691297e4c7d2ddc6dcc57) and ACC000007 (6a3691297e4c7d2ddc6dcc60). No data mutating tests committed — Record-Payment flow was cancelled before submit, avoided polluting account.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 18 verified clean. Backend pytest file `/app/backend/tests/test_iteration18_bug_fixes.py` is suitable for regression. /ledger-enhanced endpoint still uses an older proportional partial-interest algorithm — note for future iterations.",
+  "verification_details": {
+    "bug1_add_mode_image_modal": "PASS — clicking jewellery-images-0 in /accounts/new opens modal; form-upload-device-btn & form-open-camera-btn visible.",
+    "bug2_single_image_viewer": "PASS — clicking main-image inside viewer does NOT open a second modal; close-fullscreen-btn count=0.",
+    "bug3a_opening_date_locked_edit": "PASS — opening-date input disabled, label '(locked after creation)' present.",
+    "bug3b_backend_reject_opening_date_change": "PASS — PUT with new opening_date returns 400 'Opening Date cannot be changed after account creation.'",
+    "bug3c_backend_reject_received_before_opening": "PASS — POST /received with date 2020-01-01 returns 400 'The selected date cannot be earlier than the Account Opening Date'.",
+    "bug4_fifo_per_entry": "VERIFIED VIA UI — ACC000005 received entry on 10 Mar 2026 of ₹8,000 shows applied to landed[0] only as I ₹720 + P ₹7,280; landed[1] untouched.",
+    "bug4_manual_validation_sum_mismatch": "PASS — manual with sum(allocations) != amount returns 400.",
+    "bug4_manual_validation_exceeds_outstanding": "PASS — manual with allocation > outstanding returns 400.",
+    "bug4_manual_empty_allocations": "PASS — manual with empty allocations[] returns 400.",
+    "bug4_preview_endpoint": "PASS — returns entries[] with landed_index, interest_due, outstanding, plus total_outstanding/total_interest_due. Rejects payment_date before opening.",
+    "bug4_record_payment_modal": "PASS — record-payment-btn opens modal; rp-amount, rp-alloc-method-manual, rp-alloc-amount-0/1, rp-remaining-amount, rp-submit all rendered. Entering 3000 then allocating 3000 to entry 0 brings remaining to ₹0.00.",
+    "bug4_form_embedded_editor": "PASS — opening /accounts/{id}/edit shows 3 allocation blocks (one per received entry) with manual radio + per-entry rows.",
+    "bug4_received_tab_display": "PASS — table has METHOD column (FIFO / MANUAL badges) and APPLIED TO LANDED ENTRIES column with per-entry breakdown (landed_index, landed_date, I ₹x + P ₹y)."
+  }
+}

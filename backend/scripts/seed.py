@@ -229,13 +229,15 @@ async def seed():
         sorted_received = sorted(acct_data.get("received_entries", []), key=lambda x: x["date"])
         for recv in sorted_received:
             payment_date = datetime.fromisoformat(recv["date"])
-            landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
+            landed_entries, principal_paid, interest_paid, remaining_interest, per_entry = process_payment(
                 landed_entries, recv["amount"], payment_date
             )
             received_entries.append({
                 "date": recv["date"], "amount": float(recv["amount"]),
                 "principal_paid": principal_paid, "interest_paid": interest_paid,
-                "remaining_interest": remaining_interest
+                "remaining_interest": remaining_interest,
+                "allocation_method": "fifo",
+                "allocations": per_entry,
             })
 
         account_doc = {

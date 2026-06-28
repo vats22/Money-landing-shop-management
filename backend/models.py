@@ -42,12 +42,26 @@ class LandedEntry(BaseModel):
     last_interest_calc_date: Optional[str] = None
     accumulated_interest: Optional[float] = 0.0
 
+class ReceivingAllocation(BaseModel):
+    """One landed-entry slice of a manual allocation. Used for MANUAL mode."""
+    landed_index: int
+    amount: float
+    # Snapshot fields (server fills these on persist):
+    landed_date: Optional[str] = None
+    interest_paid: Optional[float] = None
+    principal_paid: Optional[float] = None
+    remaining_interest_after: Optional[float] = None
+
+
 class ReceivedEntry(BaseModel):
     date: str
     amount: float
     note: Optional[str] = ""
     principal_paid: Optional[float] = 0.0
     interest_paid: Optional[float] = 0.0
+    remaining_interest: Optional[float] = 0.0
+    allocation_method: Optional[str] = "fifo"  # "fifo" | "manual"
+    allocations: Optional[List[ReceivingAllocation]] = None
 
 class AccountCreate(BaseModel):
     opening_date: str

@@ -8,13 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { StatusBadge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Modal, ConfirmDialog } from '../components/ui/Modal';
+import { RecordPaymentModal } from '../components/ui/RecordPaymentModal';
 import { toast } from 'sonner';
 import DOMPurify from 'dompurify';
 import {
   ArrowLeft, Pencil, Gem, Wallet, TrendingUp, TrendingDown,
   Calendar, MapPin, User, FileText, BookOpen, Lock, Unlock,
   AlertCircle, Download, FileSpreadsheet, Image as ImageIcon,
-  X, ChevronLeft, ChevronRight, Clock, ZoomIn, ZoomOut, Maximize2,
+  X, ChevronLeft, ChevronRight, Clock, ZoomIn, ZoomOut,
   StickyNote
 } from 'lucide-react';
 import NotePreview from '../components/ui/NotePreview';
@@ -42,6 +43,7 @@ export default function AccountDetailPage() {
   const [activeTab, setActiveTab] = useState('overview');
   
   const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [closeRemarks, setCloseRemarks] = useState('');
   const [reopenReason, setReopenReason] = useState('');
@@ -56,7 +58,6 @@ export default function AccountDetailPage() {
 
   // Image zoom state
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [showFullscreen, setShowFullscreen] = useState(false);
 
   useEffect(() => { fetchAccountData(); }, [id]);
 
@@ -191,6 +192,17 @@ export default function AccountDetailPage() {
           <button onClick={() => handleExport('pdf')} data-testid="export-pdf-btn" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600" title="Export to PDF">
             <Download className="h-5 w-5" />
           </button>
+          {/* Record Payment */}
+          {account.status !== 'closed' && account.user_can_add && (
+            <Button
+              onClick={() => setShowRecordPaymentModal(true)}
+              data-testid="record-payment-btn"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <TrendingDown className="h-4 w-4 mr-2" />
+              Record Payment
+            </Button>
+          )}
           {/* Close Account */}
           {account.status !== 'closed' && account.user_can_close && (
             <Button onClick={() => setShowCloseModal(true)} variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" data-testid="close-account-btn">
@@ -558,13 +570,19 @@ export default function AccountDetailPage() {
                 <>
                   {/* Mobile card list */}
                   <div className="lg:hidden p-3 space-y-3">
-                    {account.received_entries.map((entry, i) => (
+                    {account.received_entries.map((entry, i) => {
+                      const allocs = entry.allocations || [];
+                      const method = (entry.allocation_method || 'fifo').toLowerCase();
+                      return (
                       <div key={i} className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
                         {/* Header band */}
                         <div className="bg-blue-50/80 px-3 py-2 flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 flex-shrink-0">#{i+1}</span>
                             <span className="text-xs text-secondary-ink truncate">{formatDate(entry.date)}</span>
+                            <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-full ${method === 'manual' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {method}
+                            </span>
                           </div>
                           <NotePreview html={entry.note} testId={`received-note-mobile-${i}`} />
                         </div>
@@ -580,8 +598,25 @@ export default function AccountDetailPage() {
                           <Stat label="Principal Paid" value={formatCurrency(entry.principal_paid)} valueClass="text-success-ink" mono />
                           <Stat label="Interest Paid" value={formatCurrency(entry.interest_paid)} valueClass="text-warning-ink" mono />
                         </div>
+
+                        {/* Per-landed-entry allocation breakdown */}
+                        {allocs.length > 0 && (
+                          <div className="px-3 pb-3" data-testid={`received-alloc-mobile-${i}`}>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-ink font-semibold mb-1.5">Applied To</p>
+                            <div className="space-y-1.5">
+                              {allocs.map((a, j) => (
+                                <div key={j} className="flex items-center justify-between text-[11px] bg-slate-50 rounded px-2 py-1.5">
+                                  <span className="text-secondary-ink">Landed #{a.landed_index + 1} · {a.landed_date}</span>
+                                  <span className="font-mono tabular-nums text-primary-ink">
+                                    I {formatCurrency(a.interest_paid)} · P {formatCurrency(a.principal_paid)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    );})}
                   </div>
 
                   {/* Desktop table */}
@@ -592,22 +627,49 @@ export default function AccountDetailPage() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">#</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">Date</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase">Amount</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase">Principal Paid</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase">Interest Paid</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase">Principal</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-secondary-ink uppercase">Interest</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">Method</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">Applied To Landed Entries</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-secondary-ink uppercase">Note</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {account.received_entries.map((entry, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
+                      {account.received_entries.map((entry, i) => {
+                        const allocs = entry.allocations || [];
+                        const method = (entry.allocation_method || 'fifo').toLowerCase();
+                        return (
+                        <tr key={i} className="hover:bg-slate-50 align-top">
                           <td className="px-4 py-3 text-sm text-muted-ink">{i + 1}</td>
-                          <td className="px-4 py-3 text-sm text-primary-ink">{formatDate(entry.date)}</td>
-                          <td className="px-4 py-3 text-sm font-mono font-semibold text-info-ink text-right tabular-nums">{formatCurrency(entry.amount)}</td>
-                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{formatCurrency(entry.principal_paid)}</td>
-                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums">{formatCurrency(entry.interest_paid)}</td>
+                          <td className="px-4 py-3 text-sm text-primary-ink whitespace-nowrap">{formatDate(entry.date)}</td>
+                          <td className="px-4 py-3 text-sm font-mono font-semibold text-info-ink text-right tabular-nums whitespace-nowrap">{formatCurrency(entry.amount)}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums whitespace-nowrap">{formatCurrency(entry.principal_paid)}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-primary-ink text-right tabular-nums whitespace-nowrap">{formatCurrency(entry.interest_paid)}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${method === 'manual' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                              {method}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs" data-testid={`received-alloc-desktop-${i}`}>
+                            {allocs.length === 0 ? (
+                              <span className="text-muted-ink italic">—</span>
+                            ) : (
+                              <div className="space-y-1">
+                                {allocs.map((a, j) => (
+                                  <div key={j} className="flex items-center gap-2 whitespace-nowrap">
+                                    <span className="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">{a.landed_index + 1}</span>
+                                    <span className="text-secondary-ink">{a.landed_date}</span>
+                                    <span className="font-mono tabular-nums text-primary-ink">I {formatCurrency(a.interest_paid)}</span>
+                                    <span className="text-muted-ink">+</span>
+                                    <span className="font-mono tabular-nums text-primary-ink">P {formatCurrency(a.principal_paid)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
                           <td className="px-4 py-3"><NotePreview html={entry.note} testId={`received-note-${i}`} /></td>
                         </tr>
-                      ))}
+                      );})}
                     </tbody>
                   </table>
                   </div>
@@ -951,6 +1013,15 @@ export default function AccountDetailPage() {
         </div>
       </Modal>
 
+      {/* Record Payment Modal */}
+      <RecordPaymentModal
+        open={showRecordPaymentModal}
+        onClose={() => setShowRecordPaymentModal(false)}
+        accountId={id}
+        openingDate={account?.opening_date}
+        onPaymentRecorded={() => fetchAccountData()}
+      />
+
       {/* Image Viewer Modal (View Only) with Zoom */}
       <Modal isOpen={showImageModal} onClose={() => { setShowImageModal(false); setZoomLevel(1); }} title={`Images - ${selectedItemName}`} size="lg">
         <div className="space-y-4">
@@ -962,16 +1033,15 @@ export default function AccountDetailPage() {
             </div>
           ) : (
             <div>
-              {/* Main image display with zoom */}
-              <div className="relative bg-slate-100 rounded-xl overflow-hidden cursor-zoom-in" style={{ minHeight: '350px' }}
-                onClick={() => setShowFullscreen(true)}
-              >
+              {/* Main image display with zoom (NO click-to-fullscreen — single viewer only) */}
+              <div className="relative bg-slate-100 rounded-xl overflow-hidden" style={{ minHeight: '350px' }}>
                 <img
                   src={getImageUrl(selectedItemImages[currentImageIdx])}
                   alt={`${selectedItemName} - ${currentImageIdx + 1}`}
-                  className="w-full h-[350px] object-contain transition-transform duration-200"
+                  className="w-full h-[350px] object-contain transition-transform duration-200 select-none"
                   style={{ transform: `scale(${zoomLevel})` }}
                   data-testid="main-image"
+                  draggable={false}
                   onError={(e) => {
                     e.currentTarget.onerror = null;
                     e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect width=%22200%22 height=%22200%22 fill=%22%23F1F5F9%22/><text x=%22100%22 y=%22100%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%2364748B%22 font-family=%22sans-serif%22 font-size=%2214%22>Image not available</text></svg>';
@@ -1002,15 +1072,12 @@ export default function AccountDetailPage() {
                 <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.25))} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" data-testid="zoom-out-btn" title="Zoom Out">
                   <ZoomOut className="h-4 w-4 text-slate-600" />
                 </button>
-                <span className="text-xs text-slate-500 w-12 text-center">{Math.round(zoomLevel * 100)}%</span>
+                <span className="text-xs text-secondary-ink w-12 text-center tabular-nums">{Math.round(zoomLevel * 100)}%</span>
                 <button onClick={() => setZoomLevel(z => Math.min(3, z + 0.25))} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" data-testid="zoom-in-btn" title="Zoom In">
                   <ZoomIn className="h-4 w-4 text-slate-600" />
                 </button>
-                <button onClick={() => setZoomLevel(1)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-xs text-slate-600" title="Reset Zoom">
+                <button onClick={() => setZoomLevel(1)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-xs text-secondary-ink" data-testid="zoom-reset-btn" title="Reset Zoom">
                   Reset
-                </button>
-                <button onClick={() => setShowFullscreen(true)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" data-testid="fullscreen-btn" title="Fullscreen">
-                  <Maximize2 className="h-4 w-4 text-slate-600" />
                 </button>
               </div>
               {/* Thumbnails */}
@@ -1038,36 +1105,6 @@ export default function AccountDetailPage() {
           )}
         </div>
       </Modal>
-
-      {/* Fullscreen Image Modal */}
-      {showFullscreen && selectedItemImages.length > 0 && (
-        <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center" onClick={() => setShowFullscreen(false)}>
-          <button onClick={() => setShowFullscreen(false)} className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-full text-white z-10" data-testid="close-fullscreen-btn">
-            <X className="h-6 w-6" />
-          </button>
-          {selectedItemImages.length > 1 && (
-            <>
-              <button onClick={(e) => { e.stopPropagation(); setCurrentImageIdx(i => (i - 1 + selectedItemImages.length) % selectedItemImages.length); }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/20 hover:bg-white/30 rounded-full text-white z-10">
-                <ChevronLeft className="h-6 w-6" />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); setCurrentImageIdx(i => (i + 1) % selectedItemImages.length); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/20 hover:bg-white/30 rounded-full text-white z-10">
-                <ChevronRight className="h-6 w-6" />
-              </button>
-            </>
-          )}
-          <img
-            src={getImageUrl(selectedItemImages[currentImageIdx])}
-            alt={`${selectedItemName} fullscreen`}
-            className="max-w-[90vw] max-h-[90vh] object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-white/20 rounded-full text-white text-sm">
-            {currentImageIdx + 1} / {selectedItemImages.length}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

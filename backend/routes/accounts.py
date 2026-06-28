@@ -9,7 +9,8 @@ from models import AccountCreate, AccountUpdate, LandedEntry, ReceivedEntry, Clo
 from utils import serialize_doc, get_next_account_number
 from services.financial import (
     calculate_account_totals, calculate_interest_for_entry,
-    process_payment, create_ledger_entry, generate_chronological_ledger
+    process_payment, create_ledger_entry, generate_chronological_ledger,
+    get_total_interest_for_entry, _remaining_principal, _entry_existed_at_payment,
 )
 
 router = APIRouter(prefix="/api", tags=["accounts"])
@@ -106,6 +107,24 @@ async def get_account(account_id: str, current_user: dict = Depends(verify_token
 async def create_account(account: AccountCreate, current_user: dict = Depends(verify_token)):
     if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "add"):
         raise HTTPException(status_code=403, detail="Permission denied: accounts.add")
+
+    # ---------- Date validations ----------
+    if not account.opening_date:
+        raise HTTPException(status_code=400, detail="Opening Date is required")
+    opening_date_str = account.opening_date
+    for le in account.landed_entries:
+        if le.date < opening_date_str:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Landed entry date ({le.date}) cannot be earlier than Account Opening Date ({opening_date_str})."
+            )
+    for re in account.received_entries:
+        if re.date < opening_date_str:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Received entry date ({re.date}) cannot be earlier than Account Opening Date ({opening_date_str})."
+            )
+
     account_number = await get_next_account_number()
     landed_entries = []
     for entry in account.landed_entries:
@@ -120,13 +139,21 @@ async def create_account(account: AccountCreate, current_user: dict = Depends(ve
         sorted_received = sorted(account.received_entries, key=lambda x: x.date)
         for recv_entry in sorted_received:
             payment_date = datetime.fromisoformat(recv_entry.date)
-            landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
-                landed_entries, recv_entry.amount, payment_date
+            allocation_method = (recv_entry.allocation_method or "fifo").lower()
+            manual_allocations = (
+                [a.model_dump() for a in (recv_entry.allocations or [])]
+                if allocation_method == "manual" else None
+            )
+            landed_entries, principal_paid, interest_paid, remaining_interest, per_entry = process_payment(
+                landed_entries, recv_entry.amount, payment_date,
+                allocations=manual_allocations
             )
             recv_dict = recv_entry.model_dump()
             recv_dict["principal_paid"] = principal_paid
             recv_dict["interest_paid"] = interest_paid
             recv_dict["remaining_interest"] = remaining_interest
+            recv_dict["allocation_method"] = allocation_method
+            recv_dict["allocations"] = per_entry
             recv_dict["note"] = recv_entry.note or ""
             received_entries.append(recv_dict)
     user_name = f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get('username')
@@ -159,11 +186,40 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
         raise HTTPException(status_code=403, detail="Permission denied: accounts.update")
     if existing.get("status") == "closed":
         raise HTTPException(status_code=403, detail="Cannot modify a closed account. Please reopen it first.")
+
+    # Opening Date is locked after creation — reject any attempt to change it.
+    if account.opening_date is not None and account.opening_date != existing.get("opening_date"):
+        raise HTTPException(
+            status_code=400,
+            detail="Opening Date cannot be changed after account creation."
+        )
+
     # Use exclude_unset so we can distinguish "field not provided" from "field set to default".
     # This matters for jewellery_items.images — we must preserve existing images when the
     # caller does not explicitly send them in the payload.
     raw_payload = account.model_dump(exclude_unset=True)
     update_data = {k: v for k, v in account.model_dump().items() if v is not None}
+
+    # Drop opening_date from update_data so existing value stays untouched
+    update_data.pop("opening_date", None)
+
+    # Validate any new dates against the existing opening_date
+    opening_date_str = existing.get("opening_date", "")
+    if opening_date_str:
+        for le in (update_data.get("landed_entries") or []):
+            d = le.get("date") if isinstance(le, dict) else None
+            if d and d < opening_date_str:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Landed entry date ({d}) cannot be earlier than Account Opening Date ({opening_date_str})."
+                )
+        for re in (update_data.get("received_entries") or []):
+            d = re.get("date") if isinstance(re, dict) else None
+            if d and d < opening_date_str:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Received entry date ({d}) cannot be earlier than Account Opening Date ({opening_date_str})."
+                )
     if "jewellery_items" in update_data:
         # Preserve images by mapping incoming items against existing items by index.
         # Frontend re-fetches images after upload and resends them, so we trust
@@ -226,14 +282,22 @@ async def update_account(account_id: str, account: AccountUpdate, current_user: 
         for recv_entry in sorted_received:
             payment_date = datetime.fromisoformat(recv_entry["date"])
             payment_amount = float(recv_entry["amount"])
-            landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
-                landed_entries, payment_amount, payment_date
+            allocation_method = (recv_entry.get("allocation_method") or "fifo").lower()
+            manual_allocations = (
+                recv_entry.get("allocations")
+                if allocation_method == "manual" and recv_entry.get("allocations")
+                else None
+            )
+            landed_entries, principal_paid, interest_paid, remaining_interest, per_entry = process_payment(
+                landed_entries, payment_amount, payment_date, allocations=manual_allocations
             )
             received_entries.append({
                 "date": recv_entry["date"], "amount": payment_amount,
                 "note": recv_entry.get("note", "") or "",
                 "principal_paid": principal_paid, "interest_paid": interest_paid,
-                "remaining_interest": remaining_interest
+                "remaining_interest": remaining_interest,
+                "allocation_method": allocation_method,
+                "allocations": per_entry,
             })
         update_data["landed_entries"] = landed_entries
         update_data["received_entries"] = received_entries
@@ -315,6 +379,13 @@ async def close_account(account_id: str, request: CloseAccountRequest, current_u
         raise HTTPException(status_code=403, detail="Permission denied: accounts.close")
     if existing.get("status") == "closed":
         raise HTTPException(status_code=400, detail="Account is already closed")
+    # Validate close date is not before account opening date
+    opening_date_str = existing.get("opening_date", "")
+    if opening_date_str and request.close_date < opening_date_str:
+        raise HTTPException(
+            status_code=400,
+            detail=f"The selected date cannot be earlier than the Account Opening Date ({opening_date_str})."
+        )
     totals = calculate_account_totals(existing)
     close_date = datetime.fromisoformat(request.close_date)
     user_name = f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip() or current_user.get('username')
@@ -390,7 +461,7 @@ async def add_landed_entry(account_id: str, entry: LandedEntry, current_user: di
     # Validate entry date is not before account opening date
     opening_date = account.get("opening_date", "")
     if opening_date and entry.date < opening_date:
-        raise HTTPException(status_code=400, detail=f"Entry date cannot be before account opening date ({opening_date})")
+        raise HTTPException(status_code=400, detail=f"The selected date cannot be earlier than the Account Opening Date ({opening_date}).")
     # Validate entry date is not in the future
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if entry.date > today_str:
@@ -426,20 +497,61 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
     # Validate entry date is not before account opening date
     opening_date = account.get("opening_date", "")
     if opening_date and entry.date < opening_date:
-        raise HTTPException(status_code=400, detail=f"Entry date cannot be before account opening date ({opening_date})")
+        raise HTTPException(status_code=400, detail=f"The selected date cannot be earlier than the Account Opening Date ({opening_date}).")
     # Validate entry date is not in the future
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if entry.date > today_str:
         raise HTTPException(status_code=400, detail="Entry date cannot be in the future")
     payment_date = datetime.fromisoformat(entry.date)
     landed_entries = account.get("landed_entries", [])
-    landed_entries, principal_paid, interest_paid, remaining_interest = process_payment(
-        landed_entries, entry.amount, payment_date
+
+    allocation_method = (entry.allocation_method or "fifo").lower()
+    manual_allocations = (
+        [a.model_dump() for a in (entry.allocations or [])]
+        if allocation_method == "manual" else None
+    )
+
+    # MANUAL allocation guards
+    if allocation_method == "manual":
+        if not manual_allocations:
+            raise HTTPException(status_code=400, detail="Manual allocation requires at least one allocation entry.")
+        total_alloc = round(sum(float(a.get("amount", 0) or 0) for a in manual_allocations), 2)
+        if abs(total_alloc - float(entry.amount)) > 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Total allocated amount ({total_alloc}) must equal the receiving amount ({entry.amount})."
+            )
+        # Each allocation must not exceed the outstanding (interest + principal) of its entry
+        for a in manual_allocations:
+            try:
+                idx = int(a.get("landed_index"))
+                amt = float(a.get("amount", 0) or 0)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Invalid allocation row.")
+            if idx < 0 or idx >= len(landed_entries):
+                raise HTTPException(status_code=400, detail="Allocation references an unknown landed entry.")
+            le = landed_entries[idx]
+            if not _entry_existed_at_payment(le, payment_date):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot allocate to landed entry #{idx + 1} — its date is later than the payment date."
+                )
+            outstanding = _remaining_principal(le) + get_total_interest_for_entry(le, payment_date)
+            if amt > outstanding + 0.01:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Allocation for landed entry #{idx + 1} (₹{amt}) exceeds its outstanding (₹{round(outstanding, 2)})."
+                )
+
+    landed_entries, principal_paid, interest_paid, remaining_interest, per_entry = process_payment(
+        landed_entries, entry.amount, payment_date, allocations=manual_allocations
     )
     recv_dict = entry.model_dump()
     recv_dict["principal_paid"] = principal_paid
     recv_dict["interest_paid"] = interest_paid
     recv_dict["remaining_interest"] = remaining_interest
+    recv_dict["allocation_method"] = allocation_method
+    recv_dict["allocations"] = per_entry
     recv_dict["note"] = entry.note or ""
     await accounts_collection.update_one(
         {"_id": ObjectId(account_id)},
@@ -451,10 +563,78 @@ async def add_received_entry(account_id: str, entry: ReceivedEntry, current_user
     await create_ledger_entry(
         account_id, "PAYMENT", entry.amount, principal_paid, interest_paid,
         running_balance, str(current_user["_id"]), entry.date,
-        remaining_interest=remaining_interest, remaining_principal=running_balance
+        remaining_interest=remaining_interest, remaining_principal=running_balance,
+        allocations=per_entry,
     )
-    return {"message": "Payment received successfully", "principal_paid": principal_paid,
-            "interest_paid": interest_paid, "remaining_interest": remaining_interest}
+    return {
+        "message": "Payment received successfully",
+        "principal_paid": principal_paid,
+        "interest_paid": interest_paid,
+        "remaining_interest": remaining_interest,
+        "allocations": per_entry,
+    }
+
+
+@router.post("/accounts/{account_id}/payments/preview")
+async def preview_payment(account_id: str, payment_date: str = Query(...), current_user: dict = Depends(verify_token)):
+    """
+    Returns the per-landed-entry outstanding (interest due + remaining principal) on `payment_date`.
+    Used by the Record-Payment / Manual allocation UI so it can show suggested amounts.
+    """
+    if not current_user.get("is_admin") and not check_permission(current_user, "accounts", "view"):
+        raise HTTPException(status_code=403, detail="Permission denied: accounts.view")
+    account = await accounts_collection.find_one({"_id": ObjectId(account_id)})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    opening_date = account.get("opening_date", "")
+    if opening_date and payment_date < opening_date:
+        raise HTTPException(status_code=400, detail=f"The selected date cannot be earlier than the Account Opening Date ({opening_date}).")
+    try:
+        pd = datetime.fromisoformat(payment_date)
+        if pd.tzinfo is None:
+            pd = pd.replace(tzinfo=timezone.utc)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid payment_date format. Use YYYY-MM-DD.")
+
+    entries_breakdown = []
+    for i, le in enumerate(account.get("landed_entries", []) or []):
+        if not _entry_existed_at_payment(le, pd):
+            continue
+        rp = _remaining_principal(le)
+        if rp <= 0:
+            entries_breakdown.append({
+                "landed_index": i,
+                "landed_date": le.get("date", ""),
+                "original_amount": float(le.get("amount", 0) or 0),
+                "remaining_principal": 0.0,
+                "interest_rate": float(le.get("interest_rate", 2) or 2),
+                "interest_due": 0.0,
+                "outstanding": 0.0,
+                "status": "paid_off",
+                "interest_start_date": le.get("interest_start_date") or le.get("date"),
+            })
+            continue
+        interest = get_total_interest_for_entry(le, pd)
+        entries_breakdown.append({
+            "landed_index": i,
+            "landed_date": le.get("date", ""),
+            "original_amount": float(le.get("amount", 0) or 0),
+            "remaining_principal": round(rp, 2),
+            "interest_rate": float(le.get("interest_rate", 2) or 2),
+            "interest_due": round(interest, 2),
+            "outstanding": round(rp + interest, 2),
+            "status": "active",
+            "interest_start_date": le.get("interest_start_date") or le.get("date"),
+        })
+
+    total_outstanding = round(sum(b["outstanding"] for b in entries_breakdown), 2)
+    total_interest_due = round(sum(b["interest_due"] for b in entries_breakdown), 2)
+    return {
+        "payment_date": payment_date,
+        "entries": entries_breakdown,
+        "total_outstanding": total_outstanding,
+        "total_interest_due": total_interest_due,
+    }
 
 
 @router.get("/ledger/{account_id}")
